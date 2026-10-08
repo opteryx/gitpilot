@@ -1,0 +1,106 @@
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f5f6f8;
+  color: #222;
+}
+
+button {
+  font: inherit;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 20px;
+  background: #263445;
+  color: white;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.app-subtitle {
+  font-size: 13px;
+  color: #b8c6d5;
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 240px;
+  padding: 20px;
+  background: #e9edf2;
+  border-right: 1px solid #cdd5de;
+}
+
+.sidebar h2,
+.content h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.sidebar h3 {
+  margin-top: 32px;
+  font-size: 14px;
+}
+
+.sidebar button {
+  width: 100%;
+  padding: 9px;
+}
+
+.placeholder {
+  color: #777;
+  font-size: 13px;
+}
+
+.content {
+  flex: 1;
+  padding: 20px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 70%;
+  color: #777;
+}
+
+.empty-state p {
+  margin-bottom: 6px;
+  font-size: 20px;
+  color: #444;
+}
+
+.empty-state span {
+  font-size: 14px;
+}
+
+.error {
+  margin-top: 12px;
+  color: #b42318;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
