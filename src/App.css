@@ -1,95 +1,94 @@
-
 /* Global */
 
 * {
-  box-sizing: border-box;
+	box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-  margin: 0;
-  width: 100%;
-  height: 100%;
+	margin: 0;
+	width: 100%;
+	height: 100%;
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  background: #f5f6f8;
-  color: #222;
+	font-family: system-ui, sans-serif;
+	background: #f5f6f8;
+	color: #222;
 }
 
 button {
-  font: inherit;
+	font: inherit;
 }
 
 /* Application */
 
 .app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
 }
 
 /* Header */
 
 .app-header {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  flex-shrink: 0;
-  padding: 14px 20px;
-  background: #263445;
-  color: white;
+	display: flex;
+	align-items: baseline;
+	gap: 16px;
+	flex-shrink: 0;
+	padding: 14px 20px;
+	background: #263445;
+	color: white;
 }
 
 .app-header h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+	margin: 0;
+	font-size: 22px;
+	font-weight: 600;
 }
 
 .app-subtitle {
-  font-size: 13px;
-  color: #b8c6d5;
+	font-size: 13px;
+	color: #b8c6d5;
 }
 
 /* Three-column layout */
 
 .app-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
 }
 
 .sidebar {
-  flex: 0 0 240px;
-  padding: 20px;
-  background: #e9edf2;
-  border-right: 1px solid #cdd5de;
-  overflow-y: auto;
+	flex: 0 0 240px;
+	padding: 20px;
+	background: #e9edf2;
+	border-right: 1px solid #cdd5de;
+	overflow-y: auto;
 }
 
 .content {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 35%;
-  min-width: 0;
-  padding: 20px;
-  overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 35%;
+	min-width: 0;
+	padding: 20px;
+	overflow: hidden;
 }
 
 .details-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  padding: 20px;
-  overflow-y: auto;
-  border-left: 1px solid #cdd5de;
-  background: #f5f6f8;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	padding: 20px;
+	overflow-y: auto;
+	border-left: 1px solid #cdd5de;
+	background: #f5f6f8;
 }
 
 /* Headings */
@@ -97,288 +96,370 @@ button {
 .sidebar h2,
 .content h2,
 .details-panel h2 {
-  margin: 0 0 14px;
-  font-size: 16px;
-  flex-shrink: 0;
+	margin: 0 0 14px;
+	font-size: 16px;
+	flex-shrink: 0;
 }
 
 .sidebar h3 {
-  margin-top: 32px;
-  font-size: 14px;
+	margin-top: 32px;
+	font-size: 14px;
 }
 
 /* Repository sidebar */
 
 .sidebar button {
-  width: 100%;
-  padding: 9px;
-  cursor: pointer;
+	width: 100%;
+	padding: 9px;
+	cursor: pointer;
 }
 
 .sidebar button:disabled {
-  cursor: wait;
+	cursor: wait;
 }
 
 .repo-path {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #666;
-  overflow-wrap: anywhere;
+	margin-top: 12px;
+	font-size: 12px;
+	color: #666;
+	overflow-wrap: anywhere;
 }
 
 .branch-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #356a9a;
+	font-size: 14px;
+	font-weight: 600;
+	color: #356a9a;
 }
 
 .placeholder {
-  color: #777;
-  font-size: 13px;
+	color: #777;
+	font-size: 13px;
 }
 
 .error {
-  margin-top: 12px;
-  color: #b42318;
-  font-size: 13px;
-  overflow-wrap: anywhere;
+	margin-top: 12px;
+	color: #b42318;
+	font-size: 13px;
+	overflow-wrap: anywhere;
 }
 
 /* Commit history */
 
 .commit-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  background: white;
-  border: 1px solid #d5dbe3;
-  border-radius: 6px;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	background: white;
+	border: 1px solid #d5dbe3;
+	border-radius: 6px;
 }
 
 .commit-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 12px;
-  border: 0;
-  border-bottom: 1px solid #e6e9ee;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	width: 100%;
+	padding: 12px;
+	border: 0;
+	border-bottom: 1px solid #e6e9ee;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
 }
 
 .commit-row:last-child {
-  border-bottom: none;
+	border-bottom: none;
 }
 
 .commit-row:hover {
-  background: #f4f7fb;
+	background: #f4f7fb;
 }
 
 .commit-row.selected {
-  background: #e3edf9;
-  box-shadow: inset 3px 0 #356a9a;
+	background: #e3edf9;
+	box-shadow: inset 3px 0 #356a9a;
 }
 
 .commit-sha {
-  flex-shrink: 0;
-  padding-top: 2px;
-  font-family: monospace;
-  font-size: 12px;
-  color: #356a9a;
+	flex-shrink: 0;
+	padding-top: 2px;
+	font-family: monospace;
+	font-size: 12px;
+	color: #356a9a;
 }
 
 .commit-details {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 4px;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	gap: 4px;
 }
 
 .commit-message {
-  font-size: 13px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
+	font-size: 13px;
+	font-weight: 500;
+	overflow-wrap: anywhere;
 }
 
 .commit-meta {
-  font-size: 11px;
-  color: #777;
+	font-size: 11px;
+	color: #777;
 }
 
 /* Empty states */
 
 .empty-state,
 .details-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  text-align: center;
-  color: #777;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	text-align: center;
+	color: #777;
 }
 
 .empty-state p,
 .details-empty p {
-  margin-bottom: 6px;
-  font-size: 18px;
-  color: #444;
+	margin-bottom: 6px;
+	font-size: 18px;
+	color: #444;
 }
 
 .empty-state span,
 .details-empty span {
-  font-size: 13px;
+	font-size: 13px;
 }
 
 /* Selected commit information */
 
 .selected-commit-info {
-  flex-shrink: 0;
-  padding: 14px;
-  background: white;
-  border: 1px solid #d5dbe3;
-  border-radius: 6px;
+	flex-shrink: 0;
+	padding: 14px;
+	background: white;
+	border: 1px solid #d5dbe3;
+	border-radius: 6px;
 }
 
 .selected-commit-message {
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 600;
+	margin-bottom: 8px;
+	font-size: 14px;
+	font-weight: 600;
 }
 
 /* Changed files */
 
 .commit-files-panel {
-  flex-shrink: 0;
-  margin-top: 16px;
-  padding: 14px;
-  background: white;
-  border: 1px solid #d5dbe3;
-  border-radius: 6px;
+	flex-shrink: 0;
+	margin-top: 16px;
+	padding: 14px;
+	background: white;
+	border: 1px solid #d5dbe3;
+	border-radius: 6px;
 }
 
 .commit-files-panel h3,
 .file-diff-panel h3 {
-  margin: 0 0 12px;
-  font-size: 14px;
+	margin: 0 0 12px;
+	font-size: 14px;
 }
 
 .commit-files-list {
-  max-height: 220px;
-  overflow-y: auto;
+	max-height: 220px;
+	overflow-y: auto;
 }
 
 .commit-file {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 8px;
-  border: 0;
-  border-bottom: 1px solid #eee;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font-size: 12px;
-  cursor: pointer;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	width: 100%;
+	padding: 8px;
+	border: 0;
+	border-bottom: 1px solid #eee;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	font-size: 12px;
+	cursor: pointer;
 }
 
 .commit-file:last-child {
-  border-bottom: none;
+	border-bottom: none;
 }
 
 .commit-file:hover {
-  background: #f4f7fb;
+	background: #f4f7fb;
 }
 
 .commit-file.selected {
-  background: #e3edf9;
+	background: #e3edf9;
 }
 
 .file-status {
-  flex-shrink: 0;
-  min-width: 18px;
-  font-family: monospace;
-  font-weight: bold;
+	flex-shrink: 0;
+	min-width: 18px;
+	font-family: monospace;
+	font-weight: bold;
 }
 
 .file-path {
-  overflow-wrap: anywhere;
+	overflow-wrap: anywhere;
 }
 
 .status-M {
-  color: #b7791f;
+	color: #b7791f;
 }
 
 .status-A {
-  color: #25803d;
+	color: #25803d;
 }
 
 .status-D {
-  color: #c53030;
+	color: #c53030;
 }
 
 /* File diff viewer */
 
 .file-diff-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 180px;
-  margin-top: 16px;
-  padding: 14px;
-  background: white;
-  border: 1px solid #d5dbe3;
-  border-radius: 6px;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 180px;
+	margin-top: 16px;
+	padding: 14px;
+	background: white;
+	border: 1px solid #d5dbe3;
+	border-radius: 6px;
 }
 
 .file-diff-panel h3 {
-  flex-shrink: 0;
-  overflow-wrap: anywhere;
+	flex-shrink: 0;
+	overflow-wrap: anywhere;
 }
 
 .file-diff {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  background: #f7f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre;
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: 12px;
+	overflow: auto;
+	background: #f7f8fa;
+	border: 1px solid #e1e4e8;
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: pre;
 }
 
 /* Keyboard accessibility */
 
 .commit-row:focus-visible,
 .commit-file:focus-visible {
-  outline: 2px solid #356a9a;
-  outline-offset: -2px;
+	outline: 2px solid #356a9a;
+	outline-offset: -2px;
 }
 
 /* Smaller windows */
 
 @media (max-width: 900px) {
-  .sidebar {
-    flex-basis: 190px;
-    padding: 14px;
-  }
+	.sidebar {
+		flex-basis: 190px;
+		padding: 14px;
+	}
 
-  .content {
-    flex-basis: 40%;
-    padding: 14px;
-  }
+	.content {
+		flex-basis: 40%;
+		padding: 14px;
+	}
 
-  .details-panel {
-    padding: 14px;
-  }
+	.details-panel {
+		padding: 14px;
+	}
+}
+
+/* Working directory changes */
+
+.working-changes-panel {
+	flex-shrink: 0;
+	margin-bottom: 20px;
+	padding: 14px;
+	background: white;
+	border: 1px solid #d5dbe3;
+	border-radius: 6px;
+}
+
+.panel-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.panel-heading h2 {
+	margin: 0;
+}
+
+.panel-heading button {
+	padding: 5px 10px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.working-changes-list {
+	max-height: 180px;
+	overflow-y: auto;
+}
+
+.working-change {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 7px 0;
+	border-bottom: 1px solid #eee;
+	font-size: 12px;
+}
+
+.working-change:last-child {
+	border-bottom: none;
+}
+
+.working-change-status {
+	flex: 0 0 65px;
+	font-weight: 600;
+	color: #356a9a;
+}
+
+.working-change-path {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.working-change {
+	width: 100%;
+	border: 0;
+	border-bottom: 1px solid #eee;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.working-change:hover {
+	background: #f4f7fb;
+}
+
+.working-change.selected {
+	background: #e3edf9;
+}
+
+.working-change:focus-visible {
+	outline: 2px solid #356a9a;
+	outline-offset: -2px;
 }
