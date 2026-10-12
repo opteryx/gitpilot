@@ -76,17 +76,26 @@ fn get_commit_files(repo_path: String, commit_sha: String) -> Result<String, Str
 }
 
 #[tauri::command]
-fn get_working_file_diff(repo_path: String, file_path: String) -> Result<String, String> {
-    let output = std::process::Command::new("git")
-        .args([
-            "-C",
-            &repo_path,
-            "diff",
-            "--no-ext-diff",
-            "HEAD",
-            "--",
-            &file_path,
-        ])
+fn get_working_file_diff(
+    repo_path: String,
+    file_path: String,
+    staged: bool,
+) -> Result<String, String> {
+    let mut command = std::process::Command::new("git");
+
+    command
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("diff")
+        .arg("--no-ext-diff");
+
+    if staged {
+        command.arg("--cached");
+    }
+
+    let output = command
+        .arg("--")
+        .arg(&file_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -116,6 +125,79 @@ fn get_working_changes(repo_path: String) -> Result<Vec<String>, String> {
         .collect();
 
     Ok(entries)
+}
+
+#[tauri::command]
+fn stage_file(repo_path: String, file_path: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("add")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+fn stage_all(repo_path: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("add")
+        .arg("-A")
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+fn unstage_all(repo_path: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("restore")
+        .arg("--staged")
+        .arg("--")
+        .arg(".")
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+#[tauri::command]
+fn unstage_file(repo_path: String, file_path: String) -> Result<(), String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("restore")
+        .arg("--staged")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
 }
 
 #[tauri::command]
@@ -156,7 +238,11 @@ pub fn run() {
             get_file_diff,
             get_working_changes,
             get_working_file_diff,
-            get_repository_root
+            get_repository_root,
+            stage_file,
+            stage_all,
+            unstage_all,
+            unstage_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -18,6 +18,7 @@ function App() {
 	const [workingChanges, setWorkingChanges] = useState([]);
 	const [changesLoading, setChangesLoading] = useState(false);
 	const [selectedWorkingFile, setSelectedWorkingFile] = useState(null);
+	const [workingDiffMode, setWorkingDiffMode] = useState("unstaged");
 
 	// Separate request IDs prevent stale asynchronous results.
 	const repoRequestId = useRef(0);
@@ -144,6 +145,64 @@ function App() {
 		}
 	}
 
+	async function stageWorkingFile(file) {
+		try {
+			await invoke("stage_file", {
+				repoPath,
+				filePath: file.path,
+			});
+
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
+	async function unstageWorkingFile(file) {
+		try {
+			await invoke("unstage_file", {
+				repoPath,
+				filePath: file.path,
+			});
+
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
+	async function stageAllFiles() {
+		if (!repoPath) return;
+
+		try {
+			setError("");
+
+			await invoke("stage_all", {
+				repoPath,
+			});
+
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
+	async function unstageAllFiles() {
+		if (!repoPath) return;
+
+		try {
+			setError("");
+
+			await invoke("unstage_all", {
+				repoPath,
+			});
+
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
 	async function selectWorkingFile(file) {
 		if (!repoPath) return;
 
@@ -165,6 +224,7 @@ function App() {
 			const result = await invoke("get_working_file_diff", {
 				repoPath,
 				filePath: file.path,
+				staged: file.indexStatus !== " " && file.indexStatus !== "?",
 			});
 
 			if (id !== fileRequestId.current) return;
@@ -308,13 +368,47 @@ function App() {
 						<div className="panel-heading">
 							<h2>Working Changes ({workingChanges.length})</h2>
 
-							<button
-								type="button"
-								onClick={() => refreshWorkingChanges()}
-								disabled={!repoPath || changesLoading}
-							>
-								{changesLoading ? "Loading..." : "Refresh"}
-							</button>
+							<div className="working-changes-actions">
+								<button
+									type="button"
+									onClick={() => refreshWorkingChanges()}
+									disabled={!repoPath || changesLoading}
+								>
+									{changesLoading ? "Loading..." : "Refresh"}
+								</button>
+
+								<button
+									type="button"
+									onClick={stageAllFiles}
+									disabled={
+										!repoPath ||
+										changesLoading ||
+										!workingChanges.some(
+											(file) =>
+												file.worktreeStatus !== " " ||
+												file.indexStatus === "?",
+										)
+									}
+								>
+									Stage All
+								</button>
+
+								<button
+									type="button"
+									onClick={unstageAllFiles}
+									disabled={
+										!repoPath ||
+										changesLoading ||
+										!workingChanges.some(
+											(file) =>
+												file.indexStatus !== " " &&
+												file.indexStatus !== "?",
+										)
+									}
+								>
+									Unstage All
+								</button>
+							</div>
 						</div>
 
 						{workingChanges.length === 0 ? (
@@ -326,39 +420,95 @@ function App() {
 						) : (
 							<div className="working-changes-list">
 								{workingChanges.map((file) => (
-									<button
-										type="button"
-										className={`working-change ${
-											selectedWorkingFile?.path ===
-											file.path
-												? "selected"
-												: ""
-										}`}
+									<div
+										className="working-change-row"
 										key={file.path}
-										onClick={() => selectWorkingFile(file)}
-										aria-pressed={
-											selectedWorkingFile?.path ===
-											file.path
-										}
 									>
-										<span className="working-change-status">
-											{file.indexStatus !== " " &&
-											file.indexStatus !== "?"
-												? "Staged"
-												: file.worktreeStatus === "?"
+										<button
+											type="button"
+											className={`working-change ${
+												selectedWorkingFile?.path ===
+												file.path
+													? "selected"
+													: ""
+											}`}
+											onClick={() =>
+												selectWorkingFile(file)
+											}
+											aria-pressed={
+												selectedWorkingFile?.path ===
+												file.path
+											}
+										>
+											<span className="working-change-status">
+												{file.indexStatus === "?" &&
+												file.worktreeStatus === "?"
 													? "Untracked"
-													: "Modified"}
-										</span>
+													: file.indexStatus !== " "
+														? file.worktreeStatus !==
+															" "
+															? "Staged + Unstaged"
+															: "Staged"
+														: file.worktreeStatus ===
+															  "D"
+															? "Deleted"
+															: file.worktreeStatus ===
+																  "A"
+																? "Added"
+																: file.worktreeStatus ===
+																	  "R"
+																	? "Renamed"
+																	: "Modified"}
+											</span>
 
-										<span className="working-change-path">
-											{file.path}
-										</span>
-									</button>
+											<span
+												className="working-change-path"
+												title={file.path}
+											>
+												{file.path}
+											</span>
+										</button>
+
+										<>
+											{(file.worktreeStatus !== " " ||
+												file.indexStatus === "?") && (
+												<button
+													type="button"
+													className="stage-file-button"
+													onClick={() =>
+														stageWorkingFile(file)
+													}
+													title={`Stage ${file.path}`}
+												>
+													Stage
+												</button>
+											)}
+
+											{file.indexStatus !== " " &&
+												file.indexStatus !== "?" && (
+													<button
+														type="button"
+														className="stage-file-button"
+														onClick={() =>
+															unstageWorkingFile(
+																file,
+															)
+														}
+														title={`Unstage ${file.path}`}
+													>
+														Unstage
+													</button>
+												)}
+										</>
+									</div>
 								))}
 							</div>
 						)}
 					</div>
+				</section>
 
+				{/* COMMIT HISTORY — Independent layout section */}
+				<section className="history-panel">
 					<h2>Commit History</h2>
 
 					{commits.length === 0 ? (
