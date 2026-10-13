@@ -155,6 +155,10 @@ function App() {
 			});
 
 			await refreshWorkingChanges();
+
+			if (selectedWorkingFile?.path === file.path) {
+				await refreshWorkingFileDiff(file, workingDiffMode);
+			}
 		} catch (err) {
 			setError(String(err));
 		}
@@ -168,6 +172,10 @@ function App() {
 			});
 
 			await refreshWorkingChanges();
+
+			if (selectedWorkingFile?.path === file.path) {
+				await refreshWorkingFileDiff(file, workingDiffMode);
+			}
 		} catch (err) {
 			setError(String(err));
 		}
@@ -184,6 +192,13 @@ function App() {
 			});
 
 			await refreshWorkingChanges();
+
+			if (selectedWorkingFile) {
+				await refreshWorkingFileDiff(
+					selectedWorkingFile,
+					workingDiffMode,
+				);
+			}
 		} catch (err) {
 			setError(String(err));
 		}
@@ -200,6 +215,13 @@ function App() {
 			});
 
 			await refreshWorkingChanges();
+
+			if (selectedWorkingFile) {
+				await refreshWorkingFileDiff(
+					selectedWorkingFile,
+					workingDiffMode,
+				);
+			}
 		} catch (err) {
 			setError(String(err));
 		}
@@ -270,6 +292,36 @@ function App() {
 				repoPath,
 				filePath: file.path,
 				staged: false,
+			});
+
+			if (id !== fileRequestId.current) return;
+
+			setFileDiff(result);
+		} catch (err) {
+			if (id === fileRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			if (id === fileRequestId.current) {
+				setDiffLoading(false);
+			}
+		}
+	}
+
+	async function refreshWorkingFileDiff(file, mode) {
+		if (!repoPath || !file) return;
+
+		const id = ++fileRequestId.current;
+
+		setFileDiff("");
+		setDiffLoading(true);
+		setError("");
+
+		try {
+			const result = await invoke("get_working_file_diff", {
+				repoPath,
+				filePath: file.path,
+				staged: mode === "staged",
 			});
 
 			if (id !== fileRequestId.current) return;
