@@ -339,6 +339,43 @@ button {
 
 /* File diff viewer */
 
+/* Staged / Unstaged selector */
+
+.diff-mode-buttons {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.diff-mode-buttons button {
+	padding: 6px 12px;
+	border: 1px solid #cdd5de;
+	border-radius: 4px;
+	background: #f5f6f8;
+	color: #444;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.diff-mode-buttons button:hover:not(:disabled) {
+	background: #e9edf2;
+}
+
+.diff-mode-buttons button.active {
+	background: #356a9a;
+	border-color: #356a9a;
+	color: white;
+}
+
+.diff-mode-buttons button:disabled {
+	cursor: wait;
+}
+
+.diff-mode-buttons button:focus-visible {
+	outline: 2px solid #356a9a;
+	outline-offset: 2px;
+}
+
 .file-diff-panel {
 	display: flex;
 	flex-direction: column;

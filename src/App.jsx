@@ -259,8 +259,8 @@ function App() {
 		setCommitFiles([]);
 		setFilesLoading(false);
 		setSelectedFile(null);
-
 		setSelectedWorkingFile(file);
+		setWorkingDiffMode("unstaged");
 		setFileDiff("");
 		setDiffLoading(true);
 		setError("");
@@ -269,7 +269,38 @@ function App() {
 			const result = await invoke("get_working_file_diff", {
 				repoPath,
 				filePath: file.path,
-				staged: file.indexStatus !== " " && file.indexStatus !== "?",
+				staged: false,
+			});
+
+			if (id !== fileRequestId.current) return;
+
+			setFileDiff(result);
+		} catch (err) {
+			if (id === fileRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			if (id === fileRequestId.current) {
+				setDiffLoading(false);
+			}
+		}
+	}
+
+	async function changeWorkingDiffMode(mode) {
+		if (!selectedWorkingFile || !repoPath) return;
+
+		const id = ++fileRequestId.current;
+
+		setWorkingDiffMode(mode);
+		setFileDiff("");
+		setDiffLoading(true);
+		setError("");
+
+		try {
+			const result = await invoke("get_working_file_diff", {
+				repoPath,
+				filePath: selectedWorkingFile.path,
+				staged: mode === "staged",
 			});
 
 			if (id !== fileRequestId.current) return;
@@ -654,12 +685,52 @@ function App() {
 							<div className="file-diff-panel">
 								<h3>Working File Differences</h3>
 
+								<div className="diff-mode-buttons">
+									<button
+										type="button"
+										className={
+											workingDiffMode === "unstaged"
+												? "active"
+												: ""
+										}
+										onClick={() =>
+											changeWorkingDiffMode("unstaged")
+										}
+										disabled={diffLoading}
+										aria-pressed={
+											workingDiffMode === "unstaged"
+										}
+									>
+										Unstaged
+									</button>
+
+									<button
+										type="button"
+										className={
+											workingDiffMode === "staged"
+												? "active"
+												: ""
+										}
+										onClick={() =>
+											changeWorkingDiffMode("staged")
+										}
+										disabled={diffLoading}
+										aria-pressed={
+											workingDiffMode === "staged"
+										}
+									>
+										Staged
+									</button>
+								</div>
+
 								{diffLoading ? (
 									<p>Loading differences...</p>
 								) : (
 									<pre className="file-diff">
 										{fileDiff ||
-											"No textual differences available. Untracked files are not yet supported."}
+											(workingDiffMode === "staged"
+												? "No staged differences for this file."
+												: "No unstaged differences for this file.")}
 									</pre>
 								)}
 							</div>
