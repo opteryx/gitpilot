@@ -227,6 +227,28 @@ fn get_file_diff(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+#[tauri::command]
+fn create_commit(repo_path: String, message: String) -> Result<String, String> {
+    if message.trim().is_empty() {
+        return Err("Commit message cannot be empty.".to_string());
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("commit")
+        .arg("-m")
+        .arg(&message)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -243,6 +265,7 @@ pub fn run() {
             stage_all,
             unstage_all,
             unstage_file,
+            create_commit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

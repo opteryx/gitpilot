@@ -19,6 +19,8 @@ function App() {
 	const [changesLoading, setChangesLoading] = useState(false);
 	const [selectedWorkingFile, setSelectedWorkingFile] = useState(null);
 	const [workingDiffMode, setWorkingDiffMode] = useState("unstaged");
+	const [commitMessage, setCommitMessage] = useState("");
+	const [commitLoading, setCommitLoading] = useState(false);
 
 	// Separate request IDs prevent stale asynchronous results.
 	const repoRequestId = useRef(0);
@@ -200,6 +202,49 @@ function App() {
 			await refreshWorkingChanges();
 		} catch (err) {
 			setError(String(err));
+		}
+	}
+
+	async function createCommit() {
+		if (!repoPath || !commitMessage.trim() || commitLoading) return;
+
+		try {
+			setCommitLoading(true);
+			setError("");
+
+			await invoke("create_commit", {
+				repoPath,
+				message: commitMessage.trim(),
+			});
+
+			setCommitMessage("");
+
+			const history = await invoke("get_commit_history", {
+				repoPath,
+			});
+
+			const parsedCommits = history
+				.split("\n")
+				.filter(Boolean)
+				.map((line) => {
+					const [sha, date, author, ...messageParts] =
+						line.split("|");
+
+					return {
+						sha,
+						date,
+						author,
+						message: messageParts.join("|"),
+					};
+				});
+
+			setCommits(parsedCommits);
+			clearSelection();
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		} finally {
+			setCommitLoading(false);
 		}
 	}
 
@@ -506,6 +551,39 @@ function App() {
 						)}
 					</div>
 				</section>
+
+				<div className="commit-panel-container">
+					<section className="commit-panel">
+						<h2>Create Commit</h2>
+
+						<textarea
+							className="commit-message-input"
+							placeholder="Enter commit message..."
+							value={commitMessage}
+							onChange={(event) =>
+								setCommitMessage(event.target.value)
+							}
+							rows={3}
+						/>
+
+						<button
+							type="button"
+							onClick={createCommit}
+							disabled={
+								!repoPath ||
+								!commitMessage.trim() ||
+								commitLoading ||
+								!workingChanges.some(
+									(file) =>
+										file.indexStatus !== " " &&
+										file.indexStatus !== "?",
+								)
+							}
+						>
+							{commitLoading ? "Committing..." : "Commit"}
+						</button>
+					</section>
+				</div>
 
 				{/* COMMIT HISTORY — Independent layout section */}
 				<section className="history-panel">
