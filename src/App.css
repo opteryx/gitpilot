@@ -54,20 +54,16 @@ button {
 	color: #b8c6d5;
 }
 
-/* Three-column layout */
+/* Application layout */
 
 .app-main {
 	display: grid;
-	grid-template-columns: 240px minmax(0, 35%) minmax(0, 1fr);
-	grid-template-rows: auto auto minmax(0, 1fr);
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
 }
 
 .sidebar {
-	grid-column: 1;
-	grid-row: 1 / 4;
 	padding: 20px;
 	background: #e9edf2;
 	border-right: 1px solid #cdd5de;
@@ -75,15 +71,11 @@ button {
 }
 
 .content {
-	grid-column: 2;
-	grid-row: 1;
 	min-width: 0;
-	padding: 20px 20px 0;
+	padding: 14px 14px 0;
 }
 
 .history-panel {
-	grid-column: 2;
-	grid-row: 3;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
@@ -93,8 +85,6 @@ button {
 }
 
 .details-panel {
-	grid-column: 3;
-	grid-row: 1 / 4;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
@@ -551,47 +541,82 @@ button {
 	outline-offset: -2px;
 }
 
-/* Smaller windows */
+/* Independent column containers */
+
+.left-column,
+.right-column {
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Wide windows: three columns */
+
+@media (min-width: 1201px) {
+	.app-main {
+		grid-template-columns: 240px minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr);
+	}
+
+	.left-column {
+		grid-column: 1;
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+	}
+
+	.right-column {
+		grid-column: 2;
+		display: grid;
+		grid-template-columns: minmax(0, 35fr) minmax(0, 65fr);
+		grid-template-rows: auto auto minmax(0, 1fr);
+		overflow: hidden;
+	}
+
+	.right-column > .content {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.right-column > .commit-panel-container {
+		grid-column: 1;
+		grid-row: 2;
+	}
+
+	.right-column > .details-panel {
+		grid-column: 2;
+		grid-row: 1 / 4;
+	}
+}
 
 /* Two-column layout for medium-sized windows */
 
 @media (min-width: 701px) and (max-width: 1200px) {
 	.app-main {
 		grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-		grid-template-rows: auto auto minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr);
+	}
+
+	.left-column,
+	.right-column {
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
 	}
 
 	.sidebar {
-		grid-column: 1;
-		grid-row: 1;
+		min-height: 0;
 		padding: 14px;
-		border-right: 1px solid #cdd5de;
 	}
 
 	.history-panel {
-		grid-column: 1;
-		grid-row: 2 / 4;
 		padding: 14px;
 		background: #e9edf2;
 		border-right: 1px solid #cdd5de;
 	}
 
-	.content {
-		grid-column: 2;
-		grid-row: 1;
-		padding: 14px 14px 0;
-	}
-
 	.details-panel {
-		grid-column: 2;
-		grid-row: 3;
 		padding: 14px;
 		border-left: none;
-	}
-
-	.commit-panel-container {
-		grid-column: 2;
-		grid-row: 2;
 	}
 }
 
@@ -633,9 +658,16 @@ button {
 	display: flex;
 	align-items: flex-start;
 	gap: 12px;
+	width: 100%;
 	padding: 7px 0;
+	border: 0;
 	border-bottom: 1px solid #eee;
+	border-radius: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
 	font-size: 12px;
+	cursor: pointer;
 }
 
 .working-change:last-child {
@@ -656,17 +688,6 @@ button {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.working-change {
-	width: 100%;
-	border: 0;
-	border-bottom: 1px solid #eee;
-	border-radius: 0;
-	background: transparent;
-	color: inherit;
-	text-align: left;
-	cursor: pointer;
 }
 
 .working-change:hover {
@@ -705,6 +726,7 @@ button {
 	opacity: 0.4;
 	cursor: default;
 }
+
 .working-changes-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -722,14 +744,12 @@ button {
 /* Create commit */
 
 .commit-panel-container {
-	grid-column: 2;
-	grid-row: 2;
 	min-width: 0;
 }
 
 .commit-panel {
 	padding: 14px;
-	margin: 0 20px 16px;
+	margin: 0 14px 16px;
 	background: white;
 	border: 1px solid #d5dbe3;
 	border-radius: 6px;
@@ -765,34 +785,18 @@ button {
 /* Single-column layout for narrow windows */
 
 @media (max-width: 700px) {
-	.commit-panel-container {
-		order: 3;
-		width: 100%;
-	}
-
-	.commit-panel {
-		margin: 0 14px 16px;
-	}
-	.sidebar {
-		order: 1;
-	}
-
-	.content {
-		order: 2;
-	}
-
-	.details-panel {
-		order: 4;
-	}
-
-	.history-panel {
-		order: 5;
-	}
-
 	.app-main {
 		display: flex;
 		flex-direction: column;
 		overflow-y: auto;
+	}
+
+	.left-column,
+	.right-column {
+		display: flex;
+		flex-direction: column;
+		flex: none;
+		width: 100%;
 	}
 
 	.sidebar,
@@ -813,6 +817,10 @@ button {
 
 	.content {
 		padding-bottom: 0;
+	}
+
+	.commit-panel-container {
+		width: 100%;
 	}
 
 	.details-panel {
