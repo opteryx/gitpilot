@@ -107,6 +107,51 @@ fn get_working_file_diff(
 }
 
 #[tauri::command]
+fn get_untracked_file_content(repo_path: String, file_path: String) -> Result<String, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let root = Path::new(&repo_path)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+
+    let full_path = root
+        .join(&file_path)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+
+    if !full_path.starts_with(&root) {
+        return Err("File is outside the repository.".to_string());
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["ls-files", "--others", "--exclude-standard", "-z", "--"])
+        .arg(&file_path)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    let is_untracked = output
+        .stdout
+        .split(|&byte| byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .any(|entry| entry == file_path.as_bytes());
+
+    if !is_untracked {
+        return Err("File is not an untracked Git file.".to_string());
+    }
+
+    let content = fs::read_to_string(&full_path).map_err(|error| error.to_string())?;
+
+    Ok(content)
+}
+
+#[tauri::command]
 fn get_working_changes(repo_path: String) -> Result<Vec<String>, String> {
     let output = std::process::Command::new("git")
         .args(["-C", &repo_path, "status", "--porcelain=v1", "-z"])
@@ -260,6 +305,7 @@ pub fn run() {
             get_file_diff,
             get_working_changes,
             get_working_file_diff,
+            get_untracked_file_content,
             get_repository_root,
             stage_file,
             stage_all,

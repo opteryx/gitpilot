@@ -140,6 +140,7 @@ function App() {
 			}
 
 			setWorkingChanges(changes);
+			return changes;
 		} catch (err) {
 			setError(String(err));
 		} finally {
@@ -154,10 +155,17 @@ function App() {
 				filePath: file.path,
 			});
 
-			await refreshWorkingChanges();
+			const changes = await refreshWorkingChanges();
 
 			if (selectedWorkingFile?.path === file.path) {
-				await refreshWorkingFileDiff(file, workingDiffMode);
+				const updatedFile = changes?.find(
+					(change) => change.path === file.path,
+				);
+
+				if (updatedFile) {
+					setSelectedWorkingFile(updatedFile);
+					await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+				}
 			}
 		} catch (err) {
 			setError(String(err));
@@ -171,10 +179,17 @@ function App() {
 				filePath: file.path,
 			});
 
-			await refreshWorkingChanges();
+			const changes = await refreshWorkingChanges();
 
 			if (selectedWorkingFile?.path === file.path) {
-				await refreshWorkingFileDiff(file, workingDiffMode);
+				const updatedFile = changes?.find(
+					(change) => change.path === file.path,
+				);
+
+				if (updatedFile) {
+					setSelectedWorkingFile(updatedFile);
+					await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+				}
 			}
 		} catch (err) {
 			setError(String(err));
@@ -288,11 +303,17 @@ function App() {
 		setError("");
 
 		try {
-			const result = await invoke("get_working_file_diff", {
-				repoPath,
-				filePath: file.path,
-				staged: false,
-			});
+			const result =
+				file.indexStatus === "?" && file.worktreeStatus === "?"
+					? await invoke("get_untracked_file_content", {
+							repoPath,
+							filePath: file.path,
+						})
+					: await invoke("get_working_file_diff", {
+							repoPath,
+							filePath: file.path,
+							staged: false,
+						});
 
 			if (id !== fileRequestId.current) return;
 
@@ -318,11 +339,19 @@ function App() {
 		setError("");
 
 		try {
-			const result = await invoke("get_working_file_diff", {
-				repoPath,
-				filePath: file.path,
-				staged: mode === "staged",
-			});
+			const result =
+				file.indexStatus === "?" &&
+				file.worktreeStatus === "?" &&
+				mode === "unstaged"
+					? await invoke("get_untracked_file_content", {
+							repoPath,
+							filePath: file.path,
+						})
+					: await invoke("get_working_file_diff", {
+							repoPath,
+							filePath: file.path,
+							staged: mode === "staged",
+						});
 
 			if (id !== fileRequestId.current) return;
 
@@ -341,32 +370,9 @@ function App() {
 	async function changeWorkingDiffMode(mode) {
 		if (!selectedWorkingFile || !repoPath) return;
 
-		const id = ++fileRequestId.current;
-
 		setWorkingDiffMode(mode);
-		setFileDiff("");
-		setDiffLoading(true);
-		setError("");
 
-		try {
-			const result = await invoke("get_working_file_diff", {
-				repoPath,
-				filePath: selectedWorkingFile.path,
-				staged: mode === "staged",
-			});
-
-			if (id !== fileRequestId.current) return;
-
-			setFileDiff(result);
-		} catch (err) {
-			if (id === fileRequestId.current) {
-				setError(String(err));
-			}
-		} finally {
-			if (id === fileRequestId.current) {
-				setDiffLoading(false);
-			}
-		}
+		await refreshWorkingFileDiff(selectedWorkingFile, mode);
 	}
 
 	async function selectCommit(commit) {
