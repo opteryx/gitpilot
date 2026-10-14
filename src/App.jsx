@@ -1,10 +1,15 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 function App() {
 	const [branch, setBranch] = useState("");
+	const [branches, setBranches] = useState([]);
+	const [newBranchName, setNewBranchName] = useState("");
+	const [branchCreating, setBranchCreating] = useState(false);
+	const [branchBusy, setBranchBusy] = useState(false);
+	const [switchAfterCreate, setSwitchAfterCreate] = useState(true);
 	const [repoPath, setRepoPath] = useState("");
 	const [commits, setCommits] = useState([]);
 	const [selectedCommit, setSelectedCommit] = useState(null);
@@ -40,6 +45,127 @@ function App() {
 		setSelectedWorkingFile(null);
 	}
 
+	async function deleteBranch(branchName) {
+		if (!repoPath || branchName === branch || repoLoading || branchBusy)
+			return;
+
+		const confirmed = await ask(
+			`Delete branch "${branchName}"?\n\n` +
+				"Git will refuse deletion if the branch has unmerged commits.",
+			{
+				title: "Delete Branch",
+				kind: "warning",
+				okLabel: "Delete",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setBranchBusy(true);
+			setError("");
+
+			await invoke("delete_branch", {
+				repoPath,
+				branchName,
+			});
+
+			const localBranches = await invoke("get_local_branches", {
+				repoPath,
+			});
+
+			setBranches(localBranches);
+		} catch (err) {
+			setError(String(err));
+		} finally {
+			setBranchBusy(false);
+		}
+	}
+
+	async function createBranch() {
+		const name = newBranchName.trim();
+
+		if (!repoPath || !name || branchCreating || repoLoading || branchBusy)
+			return;
+
+		try {
+			setBranchBusy(true);
+			setBranchCreating(true);
+			setError("");
+
+			await invoke("create_branch", {
+				repoPath,
+				branchName: name,
+			});
+
+			const localBranches = await invoke("get_local_branches", {
+				repoPath,
+			});
+
+			setBranches(localBranches);
+			setNewBranchName("");
+
+			if (switchAfterCreate) {
+				await switchBranch(name, true);
+			}
+		} catch (err) {
+			setError(String(err));
+		} finally {
+			setBranchCreating(false);
+			setBranchBusy(false);
+		}
+	}
+
+	async function switchBranch(branchName, fromCreate = false) {
+		if (!repoPath || branchName === branch || (branchBusy && !fromCreate))
+			return;
+
+		try {
+			setBranchBusy(true);
+			setError("");
+			setRepoLoading(true);
+
+			await invoke("switch_branch", {
+				repoPath,
+				branchName,
+			});
+
+			const currentBranch = await invoke("get_current_branch", {
+				repoPath,
+			});
+
+			const history = await invoke("get_commit_history", {
+				repoPath,
+			});
+
+			const parsedCommits = history
+				.split("\n")
+				.filter(Boolean)
+				.map((line) => {
+					const [sha, date, author, ...messageParts] =
+						line.split("|");
+
+					return {
+						sha,
+						date,
+						author,
+						message: messageParts.join("|"),
+					};
+				});
+
+			setBranch(currentBranch);
+			setCommits(parsedCommits);
+			clearSelection();
+			await refreshWorkingChanges();
+		} catch (err) {
+			setError(String(err));
+		} finally {
+			setRepoLoading(false);
+			setBranchBusy(false);
+		}
+	}
+
 	async function loadRepository() {
 		try {
 			const selectedPath = await open({
@@ -62,11 +188,16 @@ function App() {
 			setError("");
 			setRepoLoading(true);
 			setBranch("");
+			setBranches([]);
 			setRepoPath("");
 			setCommits([]);
 			clearSelection();
 
 			const currentBranch = await invoke("get_current_branch", {
+				repoPath: rootPath,
+			});
+
+			const localBranches = await invoke("get_local_branches", {
 				repoPath: rootPath,
 			});
 
@@ -92,7 +223,10 @@ function App() {
 				});
 
 			setBranch(currentBranch);
+			setBranches(localBranches);
 			setRepoPath(rootPath);
+			setNewBranchName("");
+			setSwitchAfterCreate(true);
 			setCommits(parsedCommits);
 			setWorkingChanges([]);
 			refreshWorkingChanges(rootPath);
@@ -489,10 +623,111 @@ function App() {
 						<p className="placeholder">No repository selected</p>
 					)}
 
+					{branches.length > 0 && (
+						<div className="branch-list">
+							<h3>Local Branches</h3>
+
+							{branches.map((branchName) => (
+								<div className="branch-row" key={branchName}>
+									<button
+										type="button"
+										className={`branch-item ${
+											branchName === branch
+												? "active"
+												: ""
+										}`}
+										onClick={() => switchBranch(branchName)}
+										disabled={
+											repoLoading ||
+											branchBusy ||
+											branchName === branch
+										}
+										aria-current={
+											branchName === branch
+												? "true"
+												: undefined
+										}
+									>
+										{branchName === branch ? "● " : ""}
+										{branchName}
+									</button>
+
+									{branchName !== branch && (
+										<button
+											type="button"
+											className="delete-branch-button"
+											onClick={() =>
+												deleteBranch(branchName)
+											}
+											disabled={repoLoading || branchBusy}
+											title={`Delete branch ${branchName}`}
+										>
+											Delete
+										</button>
+									)}
+								</div>
+							))}
+
+							<div className="create-branch">
+								<input
+									type="text"
+									placeholder="New branch name"
+									value={newBranchName}
+									onChange={(event) =>
+										setNewBranchName(event.target.value)
+									}
+									disabled={
+										branchCreating ||
+										repoLoading ||
+										branchBusy
+									}
+									aria-label="New branch name"
+								/>
+
+								<label className="switch-after-create">
+									<input
+										type="checkbox"
+										checked={switchAfterCreate}
+										onChange={(event) =>
+											setSwitchAfterCreate(
+												event.target.checked,
+											)
+										}
+										disabled={branchCreating || repoLoading}
+									/>
+									Switch to new branch
+								</label>
+
+								<button
+									type="button"
+									onClick={createBranch}
+									disabled={
+										!newBranchName.trim() ||
+										branchCreating ||
+										repoLoading ||
+										branchBusy
+									}
+								>
+									{branchCreating
+										? "Creating..."
+										: "Create Branch"}
+								</button>
+							</div>
+						</div>
+					)}
+
 					{error && (
-						<p className="error" role="alert">
-							{error}
-						</p>
+						<div className="error-message" role="alert">
+							<strong>Git Error</strong>
+							<p>{error}</p>
+							<button
+								type="button"
+								onClick={() => setError("")}
+								className="dismiss-error"
+							>
+								Dismiss
+							</button>
+						</div>
 					)}
 				</aside>
 

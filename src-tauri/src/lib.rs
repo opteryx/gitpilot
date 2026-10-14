@@ -31,6 +31,93 @@ fn get_current_branch(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_local_branches(repo_path: String) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["branch", "--format=%(refname:short)"])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    let branches = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| line.to_string())
+        .collect();
+
+    Ok(branches)
+}
+
+#[tauri::command]
+fn switch_branch(repo_path: String, branch_name: String) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("switch")
+        .arg("--")
+        .arg(&branch_name)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn create_branch(repo_path: String, branch_name: String) -> Result<(), String> {
+    let name = branch_name.trim();
+
+    if name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("branch")
+        .arg(name)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_branch(repo_path: String, branch_name: String) -> Result<(), String> {
+    let name = branch_name.trim();
+
+    if name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("branch")
+        .arg("-d")
+        .arg("--")
+        .arg(name)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn get_commit_history(repo_path: String) -> Result<String, String> {
     let output = Command::new("git")
         .arg("-C")
@@ -300,6 +387,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_current_branch,
+            get_local_branches,
+            switch_branch,
+            create_branch,
+            delete_branch,
             get_commit_history,
             get_commit_files,
             get_file_diff,
