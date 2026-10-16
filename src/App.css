@@ -111,16 +111,39 @@ button {
 	font-size: 14px;
 }
 
+/* Merge status warning */
+
+.merge-warning {
+	margin-top: 16px;
+	padding: 12px;
+	background: #fff8e6;
+	border: 1px solid #e6c76b;
+	border-radius: 6px;
+	font-size: 12px;
+}
+
+.merge-warning strong {
+	display: block;
+	margin-bottom: 6px;
+	color: #805600;
+}
+
+.merge-warning p {
+	margin: 0 0 10px;
+	line-height: 1.5;
+}
+
+.merge-warning button {
+	padding: 6px 10px;
+	font-size: 12px;
+}
+
 /* Repository sidebar */
 
 .sidebar button {
 	width: 100%;
 	padding: 9px;
 	cursor: pointer;
-}
-
-.sidebar button:disabled {
-	cursor: default;
 }
 
 .repo-path {
@@ -188,25 +211,16 @@ button {
 	margin-bottom: 0;
 }
 
+.merge-branch-button {
+	flex-shrink: 0;
+	width: auto;
+	padding: 5px 7px;
+}
+
 .delete-branch-button {
 	flex-shrink: 0;
-	width: auto !important;
-	padding: 5px 7px !important;
-	border: 1px solid #d5b5b5;
-	border-radius: 4px;
-	background: #fff5f5;
-	color: #a52a2a;
-	font-size: 11px;
-	cursor: pointer;
-}
-
-.delete-branch-button:hover:not(:disabled) {
-	background: #ffe3e3;
-}
-
-.delete-branch-button:disabled {
-	opacity: 0.5;
-	cursor: default;
+	width: auto;
+	padding: 5px 7px;
 }
 
 .create-branch {
@@ -229,11 +243,6 @@ button {
 	padding: 8px;
 	font-size: 13px;
 	cursor: pointer;
-}
-
-.create-branch button:disabled {
-	opacity: 0.5;
-	cursor: default;
 }
 
 .switch-after-create {
@@ -474,31 +483,6 @@ button {
 
 .diff-mode-buttons button {
 	padding: 6px 12px;
-	border: 1px solid #cdd5de;
-	border-radius: 4px;
-	background: #f5f6f8;
-	color: #444;
-	font-size: 12px;
-	cursor: pointer;
-}
-
-.diff-mode-buttons button:hover:not(:disabled) {
-	background: #e9edf2;
-}
-
-.diff-mode-buttons button.active {
-	background: #356a9a;
-	border-color: #356a9a;
-	color: white;
-}
-
-.diff-mode-buttons button:disabled {
-	cursor: wait;
-}
-
-.diff-mode-buttons button:focus-visible {
-	outline: 2px solid #356a9a;
-	outline-offset: 2px;
 }
 
 .file-diff-panel {
@@ -561,7 +545,19 @@ button {
 		grid-column: 1;
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.left-column > .sidebar {
+		flex: 0 1 auto;
+		min-height: 0;
 		overflow-y: auto;
+	}
+
+	.left-column > .history-panel {
+		flex: 1 1 0;
+		min-height: 180px;
+		overflow: hidden;
 	}
 
 	.right-column {
@@ -600,7 +596,24 @@ button {
 	.right-column {
 		display: flex;
 		flex-direction: column;
+		min-height: 0;
 		overflow-y: auto;
+	}
+
+	.left-column {
+		overflow: hidden;
+	}
+
+	.left-column > .sidebar {
+		flex: 0 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+	}
+
+	.left-column > .history-panel {
+		flex: 1 1 0;
+		min-height: 180px;
+		overflow: hidden;
 	}
 
 	.sidebar {
@@ -659,7 +672,7 @@ button {
 	align-items: flex-start;
 	gap: 12px;
 	width: 100%;
-	padding: 7px 0;
+	padding: 7px 5px;
 	border: 0;
 	border-bottom: 1px solid #eee;
 	border-radius: 0;
@@ -722,11 +735,6 @@ button {
 	cursor: pointer;
 }
 
-.stage-file-button:disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-
 .working-changes-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -773,13 +781,10 @@ button {
 }
 
 .commit-panel button {
-	padding: 8px 16px;
+	padding: 5px 8px;
+	font-size: 11px;
+	font-weight: 500;
 	cursor: pointer;
-}
-
-.commit-panel button:disabled {
-	opacity: 0.5;
-	cursor: default;
 }
 
 /* Single-column layout for narrow windows */
@@ -846,4 +851,215 @@ button {
 	.file-diff {
 		min-height: 180px;
 	}
+}
+
+/* Merge conflict highlighting */
+
+.working-change-row.conflicted {
+	background: #fff3e0;
+	border-left: 3px solid #e69a24;
+	border-radius: 4px;
+}
+
+.working-change-row.conflicted .working-change-status {
+	color: #a35b00;
+	font-weight: 700;
+}
+
+/* Merge conflict resolution */
+
+.conflict-resolution {
+	padding: 12px;
+	margin-bottom: 16px;
+	border: 1px solid var(--border-color, #aaa);
+	border-radius: 6px;
+}
+
+.conflict-resolution h3 {
+	margin: 0 0 8px;
+}
+
+.conflict-resolution p {
+	margin: 0 0 12px;
+	font-size: 0.9rem;
+}
+
+.conflict-resolution-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+/* Shared button design system
+   All action buttons inherit the same typography, contrast and interaction states.
+   File/commit/branch rows are selectable list items, not action buttons. */
+
+:root {
+	--button-text: #203044;
+	--button-bg: #edf1f6;
+	--button-hover: #d9e4f0;
+	--button-border: #8293a6;
+	--button-focus: #155a9a;
+	--button-primary: #245d98;
+	--button-primary-hover: #174775;
+	--button-danger-text: #822323;
+	--button-danger-bg: #fce8e8;
+	--button-danger-hover: #f5cdcd;
+}
+
+/* Exclude selectable list rows from the action-button skin. */
+button:not(:where(.branch-item, .commit-row, .commit-file, .working-change)) {
+	font-family: inherit;
+	font-weight: 500;
+	line-height: 1.35;
+	border: 1px solid var(--button-border);
+	border-radius: 5px;
+	background: var(--button-bg);
+	color: var(--button-text);
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease;
+}
+
+button:not(
+		:where(.branch-item, .commit-row, .commit-file, .working-change)
+	):hover:not(:disabled) {
+	background: var(--button-hover);
+	border-color: #526c88;
+	color: var(--button-text);
+}
+
+button.button-primary:not(:disabled) {
+	background: var(--button-primary);
+	border-color: var(--button-primary);
+	color: #fff;
+}
+
+button.button-primary:hover:not(:disabled) {
+	background: var(--button-primary-hover);
+	border-color: var(--button-primary-hover);
+	color: #fff;
+}
+
+button.button-danger:not(:disabled),
+button.delete-branch-button:not(:disabled) {
+	background: var(--button-danger-bg);
+	border-color: #b45353;
+	color: var(--button-danger-text);
+}
+
+button.button-danger:hover:not(:disabled),
+button.delete-branch-button:hover:not(:disabled) {
+	background: var(--button-danger-hover);
+	border-color: #9c3636;
+	color: #702020;
+}
+
+/* Preserve the selected tab color, including when hovered. */
+.diff-mode-buttons button.active:not(:disabled),
+.diff-mode-buttons button.active:hover:not(:disabled) {
+	background: var(--button-primary);
+	border-color: var(--button-primary);
+	color: #fff;
+}
+
+.diff-mode-buttons button.active:hover:not(:disabled) {
+	background: var(--button-primary-hover);
+	border-color: var(--button-primary-hover);
+}
+
+/* Keyboard users get an obvious focus indicator on every control. */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+	outline: 3px solid var(--button-focus);
+	outline-offset: 2px;
+}
+
+/* Disabled controls are visibly unavailable and cannot acquire hover colors. */
+button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+/* Compact action buttons: same sizing as the original Merge/Delete controls.
+   Open Repository and Commit remain larger primary actions. */
+button:not(
+	:where(
+		.branch-item,
+		.commit-row,
+		.commit-file,
+		.working-change,
+		.button-primary
+	)
+) {
+	font-size: 11px;
+	padding: 5px 8px;
+}
+
+/* Sidebar-wide buttons are intentional except for inline branch actions. */
+.sidebar .merge-branch-button,
+.sidebar .delete-branch-button {
+	width: auto;
+	padding: 5px 7px;
+}
+
+/* Keep compact controls readable, without wrapping their labels. */
+.merge-branch-button,
+.delete-branch-button,
+.stage-file-button,
+.working-changes-actions button,
+.conflict-resolution-actions button {
+	white-space: nowrap;
+}
+
+/* Compact sizing must override earlier context-specific sizing rules. */
+.sidebar .create-branch button,
+.sidebar .merge-warning button,
+.sidebar .dismiss-error,
+.panel-heading button,
+.working-changes-actions button,
+.diff-mode-buttons button,
+.conflict-resolution-actions button {
+	font-size: 11px;
+	padding: 5px 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	button {
+		transition: none !important;
+	}
+}
+
+/* Git diff highlighting */
+.diff-line {
+	display: inline;
+}
+
+.diff-added {
+	color: #176b32;
+	background: #e5f5e9;
+}
+
+.diff-removed {
+	color: #a12622;
+	background: #fde9e7;
+}
+
+.diff-hunk {
+	color: #365c9c;
+}
+
+.diff-header {
+	color: #566477;
+}
+
+.selected-commit-description {
+	margin: 0 0 12px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #3b4552;
 }

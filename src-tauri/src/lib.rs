@@ -118,6 +118,121 @@ fn delete_branch(repo_path: String, branch_name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn merge_branch(repo_path: String, branch_name: String) -> Result<String, String> {
+    let name = branch_name.trim();
+
+    if name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("merge")
+        .arg(name)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+fn get_merge_status(repo_path: String) -> Result<bool, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    Ok(output.status.success())
+}
+
+#[tauri::command]
+fn abort_merge(repo_path: String) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["merge", "--abort"])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn resolve_conflict_current(repo_path: String, file_path: String) -> Result<(), String> {
+    let checkout = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("checkout")
+        .arg("--ours")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if !checkout.status.success() {
+        return Err(String::from_utf8_lossy(&checkout.stderr).trim().to_string());
+    }
+
+    let stage = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("add")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if !stage.status.success() {
+        return Err(String::from_utf8_lossy(&stage.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn resolve_conflict_incoming(repo_path: String, file_path: String) -> Result<(), String> {
+    let checkout = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("checkout")
+        .arg("--theirs")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if !checkout.status.success() {
+        return Err(String::from_utf8_lossy(&checkout.stderr).trim().to_string());
+    }
+
+    let stage = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .arg("add")
+        .arg("--")
+        .arg(&file_path)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if !stage.status.success() {
+        return Err(String::from_utf8_lossy(&stage.stderr).trim().to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn get_commit_history(repo_path: String) -> Result<String, String> {
     let output = Command::new("git")
         .arg("-C")
@@ -140,6 +255,22 @@ fn get_commit_history(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_commit_message(repo_path: String, commit_sha: String) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["show", "-s", "--format=%B", &commit_sha])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[tauri::command]
 fn get_commit_files(repo_path: String, commit_sha: String) -> Result<String, String> {
     let output = Command::new("git")
         .arg("-C")
@@ -147,6 +278,8 @@ fn get_commit_files(repo_path: String, commit_sha: String) -> Result<String, Str
         .args([
             "diff-tree",
             "--root",
+            "-m",
+            "--first-parent",
             "--no-commit-id",
             "--name-status",
             "-r",
@@ -338,17 +471,40 @@ fn get_file_diff(
     commit_sha: String,
     file_path: String,
 ) -> Result<String, String> {
-    let output = Command::new("git")
+    // Determine whether this commit has a parent.
+    let parent_check = Command::new("git")
         .arg("-C")
         .arg(&repo_path)
-        .args([
-            "show",
-            "--format=",
-            "--no-ext-diff",
-            &commit_sha,
-            "--",
-            &file_path,
-        ])
+        .args(["rev-parse", "--verify", "--quiet"])
+        .arg(format!("{}^1", commit_sha))
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    let mut command = Command::new("git");
+
+    command.arg("-C").arg(&repo_path);
+
+    if parent_check.status.success() {
+        // Compare the commit against its first parent.
+        // This works for ordinary commits and merge commits.
+        command
+            .arg("diff")
+            .arg("--no-ext-diff")
+            .arg(format!("{}^1", commit_sha))
+            .arg(&commit_sha);
+    } else {
+        // The initial commit has no parent.
+        // Show its changes relative to an empty repository.
+        command
+            .arg("show")
+            .arg("--format=")
+            .arg("--no-ext-diff")
+            .arg(&commit_sha);
+    }
+
+    let output = command
+        .arg("--")
+        .arg(&file_path)
         .output()
         .map_err(|error| error.to_string())?;
 
@@ -391,7 +547,13 @@ pub fn run() {
             switch_branch,
             create_branch,
             delete_branch,
+            merge_branch,
+            get_merge_status,
+            abort_merge,
+            resolve_conflict_current,
+            resolve_conflict_incoming,
             get_commit_history,
+            get_commit_message,
             get_commit_files,
             get_file_diff,
             get_working_changes,

@@ -3,16 +3,49 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
+function DiffViewer({ content, isDiff = true }) {
+	if (!isDiff) return <pre className="file-diff">{content}</pre>;
+
+	const lines = content.split("\n");
+	return (
+		<pre className="file-diff">
+			{lines.map((line, index) => {
+				let className = "diff-line";
+				if (line.startsWith("@@")) className += " diff-hunk";
+				else if (line.startsWith("+") && !line.startsWith("+++"))
+					className += " diff-added";
+				else if (line.startsWith("-") && !line.startsWith("---"))
+					className += " diff-removed";
+				else if (
+					line.startsWith("diff --git ") ||
+					line.startsWith("index ") ||
+					line.startsWith("--- ") ||
+					line.startsWith("+++ ")
+				)
+					className += " diff-header";
+				return (
+					<span key={index} className={className}>
+						{line}
+						{index < lines.length - 1 ? "\n" : ""}
+					</span>
+				);
+			})}
+		</pre>
+	);
+}
+
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branches, setBranches] = useState([]);
 	const [newBranchName, setNewBranchName] = useState("");
 	const [branchCreating, setBranchCreating] = useState(false);
 	const [branchBusy, setBranchBusy] = useState(false);
+	const [mergeInProgress, setMergeInProgress] = useState(false);
 	const [switchAfterCreate, setSwitchAfterCreate] = useState(true);
 	const [repoPath, setRepoPath] = useState("");
 	const [commits, setCommits] = useState([]);
 	const [selectedCommit, setSelectedCommit] = useState(null);
+	const [selectedCommitMessage, setSelectedCommitMessage] = useState("");
 	const [commitFiles, setCommitFiles] = useState([]);
 	const [filesLoading, setFilesLoading] = useState(false);
 	const [selectedFile, setSelectedFile] = useState(null);
@@ -32,11 +65,18 @@ function App() {
 	const commitRequestId = useRef(0);
 	const fileRequestId = useRef(0);
 
+	function isConflicted(file) {
+		return ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(
+			file.indexStatus + file.worktreeStatus,
+		);
+	}
+
 	function clearSelection() {
 		commitRequestId.current += 1;
 		fileRequestId.current += 1;
 
 		setSelectedCommit(null);
+		setSelectedCommitMessage("");
 		setCommitFiles([]);
 		setFilesLoading(false);
 		setSelectedFile(null);
@@ -45,8 +85,131 @@ function App() {
 		setSelectedWorkingFile(null);
 	}
 
+	async function refreshMergeStatus(path = repoPath) {
+		if (!path) return;
+
+		try {
+			const inProgress = await invoke("get_merge_status", {
+				repoPath: path,
+			});
+
+			setMergeInProgress(inProgress);
+			return inProgress;
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
+	async function mergeBranch(branchName) {
+		if (
+			!repoPath ||
+			branchName === branch ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress
+		)
+			return;
+
+		const confirmed = await ask(
+			`Merge "${branchName}" into "${branch}"?\n\n` +
+				`Current branch: ${branch}\n` +
+				`Branch to merge: ${branchName}\n\n` +
+				"Git will combine the changes from the selected branch into the current branch.",
+			{
+				title: "Merge Branch",
+				kind: "warning",
+				okLabel: "Merge",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setBranchBusy(true);
+			setRepoLoading(true);
+			setError("");
+
+			const result = await invoke("merge_branch", {
+				repoPath,
+				branchName,
+			});
+
+			const history = await invoke("get_commit_history", {
+				repoPath,
+			});
+
+			const parsedCommits = history
+				.split("\n")
+				.filter(Boolean)
+				.map((line) => {
+					const [sha, date, author, ...messageParts] =
+						line.split("|");
+
+					return {
+						sha,
+						date,
+						author,
+						message: messageParts.join("|"),
+					};
+				});
+
+			setCommits(parsedCommits);
+			clearSelection();
+			await refreshWorkingChanges();
+
+			console.log("Merge result:", result);
+		} catch (err) {
+			setError(String(err));
+			await refreshWorkingChanges();
+		} finally {
+			await refreshMergeStatus();
+			setRepoLoading(false);
+			setBranchBusy(false);
+		}
+	}
+
+	async function abortMerge() {
+		if (!repoPath || !mergeInProgress || branchBusy) return;
+
+		const confirmed = await ask(
+			"Abort the current merge?\n\n" +
+				"Git will attempt to restore the repository to its pre-merge state.",
+			{
+				title: "Abort Merge",
+				kind: "warning",
+				okLabel: "Abort Merge",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setBranchBusy(true);
+			setError("");
+
+			await invoke("abort_merge", { repoPath });
+
+			await refreshWorkingChanges();
+			await refreshMergeStatus();
+			clearSelection();
+		} catch (err) {
+			setError(String(err));
+			await refreshMergeStatus();
+		} finally {
+			setBranchBusy(false);
+		}
+	}
+
 	async function deleteBranch(branchName) {
-		if (!repoPath || branchName === branch || repoLoading || branchBusy)
+		if (
+			!repoPath ||
+			branchName === branch ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress
+		)
 			return;
 
 		const confirmed = await ask(
@@ -86,7 +249,14 @@ function App() {
 	async function createBranch() {
 		const name = newBranchName.trim();
 
-		if (!repoPath || !name || branchCreating || repoLoading || branchBusy)
+		if (
+			!repoPath ||
+			!name ||
+			branchCreating ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress
+		)
 			return;
 
 		try {
@@ -118,7 +288,12 @@ function App() {
 	}
 
 	async function switchBranch(branchName, fromCreate = false) {
-		if (!repoPath || branchName === branch || (branchBusy && !fromCreate))
+		if (
+			!repoPath ||
+			branchName === branch ||
+			mergeInProgress ||
+			(branchBusy && !fromCreate)
+		)
 			return;
 
 		try {
@@ -229,7 +404,9 @@ function App() {
 			setSwitchAfterCreate(true);
 			setCommits(parsedCommits);
 			setWorkingChanges([]);
+			setMergeInProgress(false);
 			refreshWorkingChanges(rootPath);
+			await refreshMergeStatus(rootPath);
 		} catch (err) {
 			setError(String(err));
 		} finally {
@@ -283,6 +460,10 @@ function App() {
 	}
 
 	async function stageWorkingFile(file) {
+		if (isConflicted(file)) {
+			setError("Resolve the merge conflict before staging this file.");
+			return;
+		}
 		try {
 			await invoke("stage_file", {
 				repoPath,
@@ -307,6 +488,10 @@ function App() {
 	}
 
 	async function unstageWorkingFile(file) {
+		if (isConflicted(file)) {
+			setError("Resolve or abort the merge before unstaging this file.");
+			return;
+		}
 		try {
 			await invoke("unstage_file", {
 				repoPath,
@@ -333,6 +518,11 @@ function App() {
 	async function stageAllFiles() {
 		if (!repoPath) return;
 
+		if (workingChanges.some(isConflicted)) {
+			setError("Resolve all merge conflicts before using Stage All.");
+			return;
+		}
+
 		try {
 			setError("");
 
@@ -353,8 +543,105 @@ function App() {
 		}
 	}
 
+	async function resolveConflictCurrent(file) {
+		if (!repoPath || !file || !isConflicted(file)) return;
+
+		const confirmed = await ask(
+			`Keep the current branch version of "${file.path}"?\n\n` +
+				"This will discard the incoming version for this conflicted file and mark the conflict as resolved.",
+			{
+				title: "Keep Current Version",
+				kind: "warning",
+				okLabel: "Keep Current",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setError("");
+
+			await invoke("resolve_conflict_current", {
+				repoPath,
+				filePath: file.path,
+			});
+
+			const changes = await refreshWorkingChanges();
+
+			const updatedFile = changes?.find(
+				(change) => change.path === file.path,
+			);
+
+			if (updatedFile) {
+				setSelectedWorkingFile(updatedFile);
+				await refreshWorkingFileDiff(updatedFile, "staged");
+				setWorkingDiffMode("staged");
+			} else {
+				setSelectedWorkingFile(null);
+				setFileDiff("");
+			}
+
+			await refreshMergeStatus();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
+	async function resolveConflictIncoming(file) {
+		if (!repoPath || !file || !isConflicted(file)) return;
+
+		const confirmed = await ask(
+			`Keep the incoming branch version of "${file.path}"?\n\n` +
+				"This will discard the current branch version for this conflicted file and mark the conflict as resolved.",
+			{
+				title: "Keep Incoming Version",
+				kind: "warning",
+				okLabel: "Keep Incoming",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setError("");
+
+			await invoke("resolve_conflict_incoming", {
+				repoPath,
+				filePath: file.path,
+			});
+
+			const changes = await refreshWorkingChanges();
+
+			const updatedFile = changes?.find(
+				(change) => change.path === file.path,
+			);
+
+			if (updatedFile) {
+				setSelectedWorkingFile(updatedFile);
+				await refreshWorkingFileDiff(updatedFile, "staged");
+				setWorkingDiffMode("staged");
+			} else {
+				setSelectedWorkingFile(null);
+				setFileDiff("");
+			}
+
+			await refreshMergeStatus();
+		} catch (err) {
+			setError(String(err));
+		}
+	}
+
 	async function unstageAllFiles() {
 		if (!repoPath) return;
+
+		if (workingChanges.some(isConflicted)) {
+			setError(
+				"Resolve or abort merge conflicts before using Unstage All.",
+			);
+			return;
+		}
 
 		try {
 			setError("");
@@ -378,6 +665,11 @@ function App() {
 
 	async function createCommit() {
 		if (!repoPath || !commitMessage.trim() || commitLoading) return;
+
+		if (workingChanges.some(isConflicted)) {
+			setError("Resolve all merge conflicts before creating a commit.");
+			return;
+		}
 
 		try {
 			setCommitLoading(true);
@@ -412,6 +704,7 @@ function App() {
 			setCommits(parsedCommits);
 			clearSelection();
 			await refreshWorkingChanges();
+			await refreshMergeStatus();
 		} catch (err) {
 			setError(String(err));
 		} finally {
@@ -427,6 +720,7 @@ function App() {
 		// Switch from commit details to working-file details.
 		commitRequestId.current += 1;
 		setSelectedCommit(null);
+		setSelectedCommitMessage("");
 		setCommitFiles([]);
 		setFilesLoading(false);
 		setSelectedFile(null);
@@ -517,6 +811,7 @@ function App() {
 
 		setSelectedWorkingFile(null);
 		setSelectedCommit(commit);
+		setSelectedCommitMessage(commit.message);
 		setCommitFiles([]);
 		setFilesLoading(true);
 		setSelectedFile(null);
@@ -525,10 +820,13 @@ function App() {
 		setError("");
 
 		try {
-			const result = await invoke("get_commit_files", {
-				repoPath,
-				commitSha: commit.sha,
-			});
+			const [result, fullMessage] = await Promise.all([
+				invoke("get_commit_files", { repoPath, commitSha: commit.sha }),
+				invoke("get_commit_message", {
+					repoPath,
+					commitSha: commit.sha,
+				}),
+			]);
 
 			if (id !== commitRequestId.current) return;
 
@@ -545,6 +843,7 @@ function App() {
 				});
 
 			setCommitFiles(files);
+			setSelectedCommitMessage(fullMessage.trimEnd());
 		} catch (err) {
 			if (id === commitRequestId.current) {
 				setError(String(err));
@@ -605,6 +904,7 @@ function App() {
 						<button
 							type="button"
 							onClick={loadRepository}
+							className="button-primary"
 							disabled={repoLoading}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
@@ -614,6 +914,24 @@ function App() {
 							<p className="repo-path" title={repoPath}>
 								{repoPath}
 							</p>
+						)}
+
+						{mergeInProgress && (
+							<div className="merge-warning">
+								<strong>Merge in Progress</strong>
+								<p>
+									Git has not completed the current merge.
+									Resolve the conflicts or abort the merge.
+								</p>
+								<button
+									type="button"
+									onClick={abortMerge}
+									className="button-danger"
+									disabled={branchBusy}
+								>
+									Abort Merge
+								</button>
+							</div>
 						)}
 
 						<h3>Current Branch</h3>
@@ -648,6 +966,7 @@ function App() {
 											disabled={
 												repoLoading ||
 												branchBusy ||
+												mergeInProgress ||
 												branchName === branch
 											}
 											aria-current={
@@ -661,19 +980,39 @@ function App() {
 										</button>
 
 										{branchName !== branch && (
-											<button
-												type="button"
-												className="delete-branch-button"
-												onClick={() =>
-													deleteBranch(branchName)
-												}
-												disabled={
-													repoLoading || branchBusy
-												}
-												title={`Delete branch ${branchName}`}
-											>
-												Delete
-											</button>
+											<>
+												<button
+													type="button"
+													className="merge-branch-button"
+													onClick={() =>
+														mergeBranch(branchName)
+													}
+													disabled={
+														repoLoading ||
+														branchBusy ||
+														mergeInProgress
+													}
+													title={`Merge ${branchName} into ${branch}`}
+												>
+													Merge
+												</button>
+
+												<button
+													type="button"
+													className="delete-branch-button"
+													onClick={() =>
+														deleteBranch(branchName)
+													}
+													disabled={
+														repoLoading ||
+														branchBusy ||
+														mergeInProgress
+													}
+													title={`Delete branch ${branchName}`}
+												>
+													Delete
+												</button>
+											</>
 										)}
 									</div>
 								))}
@@ -689,7 +1028,8 @@ function App() {
 										disabled={
 											branchCreating ||
 											repoLoading ||
-											branchBusy
+											branchBusy ||
+											mergeInProgress
 										}
 										aria-label="New branch name"
 									/>
@@ -704,7 +1044,9 @@ function App() {
 												)
 											}
 											disabled={
-												branchCreating || repoLoading
+												branchCreating ||
+												repoLoading ||
+												mergeInProgress
 											}
 										/>
 										Switch to new branch
@@ -717,7 +1059,8 @@ function App() {
 											!newBranchName.trim() ||
 											branchCreating ||
 											repoLoading ||
-											branchBusy
+											branchBusy ||
+											mergeInProgress
 										}
 									>
 										{branchCreating
@@ -817,6 +1160,7 @@ function App() {
 										disabled={
 											!repoPath ||
 											changesLoading ||
+											workingChanges.some(isConflicted) ||
 											!workingChanges.some(
 												(file) =>
 													file.worktreeStatus !==
@@ -834,6 +1178,7 @@ function App() {
 										disabled={
 											!repoPath ||
 											changesLoading ||
+											workingChanges.some(isConflicted) ||
 											!workingChanges.some(
 												(file) =>
 													file.indexStatus !== " " &&
@@ -856,7 +1201,11 @@ function App() {
 								<div className="working-changes-list">
 									{workingChanges.map((file) => (
 										<div
-											className="working-change-row"
+											className={`working-change-row ${
+												isConflicted(file)
+													? "conflicted"
+													: ""
+											}`}
 											key={file.path}
 										>
 											<button
@@ -876,25 +1225,29 @@ function App() {
 												}
 											>
 												<span className="working-change-status">
-													{file.indexStatus === "?" &&
-													file.worktreeStatus === "?"
-														? "Untracked"
-														: file.indexStatus !==
-															  " "
-															? file.worktreeStatus !==
-																" "
-																? "Staged + Unstaged"
-																: "Staged"
-															: file.worktreeStatus ===
-																  "D"
-																? "Deleted"
+													{isConflicted(file)
+														? "Conflicted"
+														: file.indexStatus ===
+																	"?" &&
+															  file.worktreeStatus ===
+																	"?"
+															? "Untracked"
+															: file.indexStatus !==
+																  " "
+																? file.worktreeStatus !==
+																	" "
+																	? "Staged + Unstaged"
+																	: "Staged"
 																: file.worktreeStatus ===
-																	  "A"
-																	? "Added"
+																	  "D"
+																	? "Deleted"
 																	: file.worktreeStatus ===
-																		  "R"
-																		? "Renamed"
-																		: "Modified"}
+																		  "A"
+																		? "Added"
+																		: file.worktreeStatus ===
+																			  "R"
+																			? "Renamed"
+																			: "Modified"}
 												</span>
 
 												<span
@@ -912,6 +1265,9 @@ function App() {
 													<button
 														type="button"
 														className="stage-file-button"
+														disabled={isConflicted(
+															file,
+														)}
 														onClick={() =>
 															stageWorkingFile(
 																file,
@@ -929,6 +1285,9 @@ function App() {
 														<button
 															type="button"
 															className="stage-file-button"
+															disabled={isConflicted(
+																file,
+															)}
 															onClick={() =>
 																unstageWorkingFile(
 																	file,
@@ -953,7 +1312,9 @@ function App() {
 
 							<textarea
 								className="commit-message-input"
-								placeholder="Enter commit message..."
+								placeholder={
+									"Commit summary\n\nOptional description (separate with a blank line)..."
+								}
 								value={commitMessage}
 								onChange={(event) =>
 									setCommitMessage(event.target.value)
@@ -964,10 +1325,12 @@ function App() {
 							<button
 								type="button"
 								onClick={createCommit}
+								className="button-primary"
 								disabled={
 									!repoPath ||
 									!commitMessage.trim() ||
 									commitLoading ||
+									workingChanges.some(isConflicted) ||
 									!workingChanges.some(
 										(file) =>
 											file.indexStatus !== " " &&
@@ -998,6 +1361,45 @@ function App() {
 										Uncommitted changes
 									</div>
 								</div>
+
+								{isConflicted(selectedWorkingFile) && (
+									<div className="conflict-resolution">
+										<h3>Resolve Merge Conflict</h3>
+
+										<p>
+											Choose which version of this file to
+											keep. The selected version will
+											replace the entire file and be
+											staged automatically.
+										</p>
+
+										<div className="conflict-resolution-actions">
+											<button
+												type="button"
+												className="button-secondary"
+												onClick={() =>
+													resolveConflictCurrent(
+														selectedWorkingFile,
+													)
+												}
+											>
+												Keep Current
+											</button>
+
+											<button
+												type="button"
+												className="button-secondary"
+												onClick={() =>
+													resolveConflictIncoming(
+														selectedWorkingFile,
+													)
+												}
+											>
+												Keep Incoming
+											</button>
+										</div>
+									</div>
+								)}
 
 								<div className="file-diff-panel">
 									<h3>Working File Differences</h3>
@@ -1045,12 +1447,22 @@ function App() {
 									{diffLoading ? (
 										<p>Loading differences...</p>
 									) : (
-										<pre className="file-diff">
-											{fileDiff ||
+										<DiffViewer
+											content={
+												fileDiff ||
 												(workingDiffMode === "staged"
 													? "No staged differences for this file."
-													: "No unstaged differences for this file.")}
-										</pre>
+													: "No unstaged differences for this file.")
+											}
+											isDiff={
+												!(
+													selectedWorkingFile.indexStatus ===
+														"?" &&
+													selectedWorkingFile.worktreeStatus ===
+														"?"
+												) && Boolean(fileDiff)
+											}
+										/>
 									)}
 								</div>
 							</>
@@ -1068,6 +1480,20 @@ function App() {
 									<div className="selected-commit-message">
 										{selectedCommit.message}
 									</div>
+
+									{selectedCommitMessage
+										.split(/\r?\n\r?\n/)
+										.slice(1)
+										.join("\n\n")
+										.trim() && (
+										<div className="selected-commit-description">
+											{selectedCommitMessage
+												.split(/\r?\n\r?\n/)
+												.slice(1)
+												.join("\n\n")
+												.trim()}
+										</div>
+									)}
 
 									<div className="commit-meta">
 										{selectedCommit.sha} ·{" "}
@@ -1133,10 +1559,13 @@ function App() {
 									) : diffLoading ? (
 										<p>Loading differences...</p>
 									) : (
-										<pre className="file-diff">
-											{fileDiff ||
-												"No textual differences available."}
-										</pre>
+										<DiffViewer
+											content={
+												fileDiff ||
+												"No textual differences available."
+											}
+											isDiff={Boolean(fileDiff)}
+										/>
 									)}
 								</div>
 							</>
