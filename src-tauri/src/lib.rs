@@ -1,5 +1,28 @@
 use std::process::Command;
 
+// Shared Git command runner for upcoming remote operations. Git's arguments
+// are passed separately (not through a shell) to avoid shell interpretation.
+// Existing local commands remain unchanged to preserve tested behavior.
+fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("Git exited with status {}", output.status)
+        } else {
+            stderr
+        });
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 #[tauri::command]
 fn get_repository_root(repo_path: String) -> Result<String, String> {
     let output = std::process::Command::new("git")
@@ -16,18 +39,7 @@ fn get_repository_root(repo_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_current_branch(repo_path: String) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .args(["branch", "--show-current"])
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    run_git(&repo_path, &["branch", "--show-current"])
 }
 
 #[tauri::command]

@@ -34,6 +34,21 @@ function DiffViewer({ content, isDiff = true }) {
 	);
 }
 
+function parseCommitHistory(history) {
+	return history
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => {
+			const [sha, date, author, ...messageParts] = line.split("|");
+			return { sha, date, author, message: messageParts.join("|") };
+		});
+}
+
+async function fetchCommitHistory(repoPath) {
+	const history = await invoke("get_commit_history", { repoPath });
+	return parseCommitHistory(history);
+}
+
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branches, setBranches] = useState([]);
@@ -64,6 +79,7 @@ function App() {
 	const repoRequestId = useRef(0);
 	const commitRequestId = useRef(0);
 	const fileRequestId = useRef(0);
+	const workingChangesRequestId = useRef(0);
 
 	function isConflicted(file) {
 		return ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(
@@ -135,24 +151,7 @@ function App() {
 				branchName,
 			});
 
-			const history = await invoke("get_commit_history", {
-				repoPath,
-			});
-
-			const parsedCommits = history
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => {
-					const [sha, date, author, ...messageParts] =
-						line.split("|");
-
-					return {
-						sha,
-						date,
-						author,
-						message: messageParts.join("|"),
-					};
-				});
+			const parsedCommits = await fetchCommitHistory(repoPath);
 
 			setCommits(parsedCommits);
 			clearSelection();
@@ -310,24 +309,7 @@ function App() {
 				repoPath,
 			});
 
-			const history = await invoke("get_commit_history", {
-				repoPath,
-			});
-
-			const parsedCommits = history
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => {
-					const [sha, date, author, ...messageParts] =
-						line.split("|");
-
-					return {
-						sha,
-						date,
-						author,
-						message: messageParts.join("|"),
-					};
-				});
+			const parsedCommits = await fetchCommitHistory(repoPath);
 
 			setBranch(currentBranch);
 			setCommits(parsedCommits);
@@ -382,20 +364,7 @@ function App() {
 
 			if (id !== repoRequestId.current) return;
 
-			const parsedCommits = history
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => {
-					const [sha, date, author, ...messageParts] =
-						line.split("|");
-
-					return {
-						sha,
-						date,
-						author,
-						message: messageParts.join("|"),
-					};
-				});
+			const parsedCommits = parseCommitHistory(history);
 
 			setBranch(currentBranch);
 			setBranches(localBranches);
@@ -403,10 +372,13 @@ function App() {
 			setNewBranchName("");
 			setSwitchAfterCreate(true);
 			setCommits(parsedCommits);
+			workingChangesRequestId.current += 1;
 			setWorkingChanges([]);
 			setMergeInProgress(false);
-			refreshWorkingChanges(rootPath);
-			await refreshMergeStatus(rootPath);
+			await Promise.all([
+				refreshWorkingChanges(rootPath),
+				refreshMergeStatus(rootPath),
+			]);
 		} catch (err) {
 			setError(String(err));
 		} finally {
@@ -417,6 +389,7 @@ function App() {
 	async function refreshWorkingChanges(path = repoPath) {
 		if (!path) return;
 
+		const id = ++workingChangesRequestId.current;
 		setChangesLoading(true);
 
 		try {
@@ -450,12 +423,14 @@ function App() {
 				}
 			}
 
+			if (id !== workingChangesRequestId.current) return;
 			setWorkingChanges(changes);
 			return changes;
 		} catch (err) {
-			setError(String(err));
+			if (id === workingChangesRequestId.current) setError(String(err));
 		} finally {
-			setChangesLoading(false);
+			if (id === workingChangesRequestId.current)
+				setChangesLoading(false);
 		}
 	}
 
@@ -530,13 +505,20 @@ function App() {
 				repoPath,
 			});
 
-			await refreshWorkingChanges();
+			const changes = await refreshWorkingChanges();
 
-			if (selectedWorkingFile) {
-				await refreshWorkingFileDiff(
-					selectedWorkingFile,
-					workingDiffMode,
+			if (selectedWorkingFile && changes) {
+				const updatedFile = changes.find(
+					(file) => file.path === selectedWorkingFile.path,
 				);
+
+				if (updatedFile) {
+					setSelectedWorkingFile(updatedFile);
+					await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+				} else {
+					setSelectedWorkingFile(null);
+					setFileDiff("");
+				}
 			}
 		} catch (err) {
 			setError(String(err));
@@ -650,13 +632,20 @@ function App() {
 				repoPath,
 			});
 
-			await refreshWorkingChanges();
+			const changes = await refreshWorkingChanges();
 
-			if (selectedWorkingFile) {
-				await refreshWorkingFileDiff(
-					selectedWorkingFile,
-					workingDiffMode,
+			if (selectedWorkingFile && changes) {
+				const updatedFile = changes.find(
+					(file) => file.path === selectedWorkingFile.path,
 				);
+
+				if (updatedFile) {
+					setSelectedWorkingFile(updatedFile);
+					await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+				} else {
+					setSelectedWorkingFile(null);
+					setFileDiff("");
+				}
 			}
 		} catch (err) {
 			setError(String(err));
@@ -682,24 +671,7 @@ function App() {
 
 			setCommitMessage("");
 
-			const history = await invoke("get_commit_history", {
-				repoPath,
-			});
-
-			const parsedCommits = history
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => {
-					const [sha, date, author, ...messageParts] =
-						line.split("|");
-
-					return {
-						sha,
-						date,
-						author,
-						message: messageParts.join("|"),
-					};
-				});
+			const parsedCommits = await fetchCommitHistory(repoPath);
 
 			setCommits(parsedCommits);
 			clearSelection();
