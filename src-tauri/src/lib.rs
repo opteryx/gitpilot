@@ -1,4 +1,6 @@
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 // Shared Git command runner for upcoming remote operations. Git's arguments
 // are passed separately (not through a shell) to avoid shell interpretation.
@@ -25,16 +27,142 @@ fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
 
 #[tauri::command]
 fn get_repository_root(repo_path: String) -> Result<String, String> {
-    let output = std::process::Command::new("git")
-        .args(["-C", &repo_path, "rev-parse", "--show-toplevel"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    run_git(&repo_path, &["rev-parse", "--show-toplevel"])
+}
 
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
+#[tauri::command]
+fn get_upstream_status(repo_path: String) -> Result<String, String> {
+    let upstream = run_git(
+        &repo_path,
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{upstream}",
+        ],
+    );
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let upstream = match upstream {
+        Ok(name) => name,
+        Err(error) if error.contains("no upstream configured") || error.contains("no upstream") => {
+            return Ok(String::new());
+        }
+        Err(error) => return Err(error),
+    };
+
+    let counts = run_git(
+        &repo_path,
+        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+    )?;
+
+    Ok(format!("{}|{}", upstream, counts.replace('\t', "|")))
+}
+
+#[tauri::command]
+fn get_remotes(repo_path: String) -> Result<String, String> {
+    run_git(&repo_path, &["remote", "-v"])
+}
+
+// Fetch runs on a blocking worker, not the Tauri UI thread. Credentials are
+// intentionally noninteractive for now; a future login flow can be added.
+#[tauri::command]
+async fn fetch_remote(repo_path: String, remote_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let remote = remote_name.trim();
+        if remote.is_empty() || remote.starts_with('-') {
+            return Err("Choose a valid remote to fetch.".to_string());
+        }
+
+        // Resolve the remote by its configured name, not as an arbitrary URL.
+        let names = run_git(&repo_path, &["remote"])?;
+        if !names.lines().any(|name| name == remote) {
+            return Err(format!("Remote '{remote}' is not configured for this repository."));
+        }
+
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            // Do not invoke VS Code/Git Credential Manager credential helpers.
+            .args(["-c", "credential.helper="])
+            .args(["-c", "core.askPass="])
+            .args(["-c", "http.lowSpeedLimit=1000"])
+            .args(["-c", "http.lowSpeedTime=20"])
+            .args(["fetch", "--quiet", "--", remote])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
+            .env("GIT_ASKPASS", "false")
+            .env("SSH_ASKPASS", "false")
+            .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes -o ConnectTimeout=10")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Unable to start Git fetch: {error}"))?;
+
+        // Drain both pipes concurrently, preventing a chatty child from
+        // blocking while the parent waits for it to exit.
+        let mut stdout = child.stdout.take().ok_or("Missing fetch stdout")?;
+        let mut stderr = child.stderr.take().ok_or("Missing fetch stderr")?;
+        let stdout_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let stderr_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        let started = Instant::now();
+        let timeout = Duration::from_secs(45);
+        let (status, timed_out) = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status, false),
+                Ok(None) if started.elapsed() >= timeout => {
+                    // Reap the process after terminating it.
+                    let _ = child.kill();
+                    let status = child.wait().map_err(|error| error.to_string())?;
+                    break (status, true);
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Unable to monitor Git fetch: {error}"));
+                }
+            }
+        };
+
+        let stdout = stdout_reader
+            .join()
+            .map_err(|_| "Unable to read Git fetch output".to_string())?
+            .map_err(|error| error.to_string())?;
+        let stderr = stderr_reader
+            .join()
+            .map_err(|_| "Unable to read Git fetch errors".to_string())?
+            .map_err(|error| error.to_string())?;
+        let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+
+        if timed_out {
+            return Err("Fetch timed out after 45 seconds. Check your network connection and Git credentials.".to_string());
+        }
+        if !status.success() {
+            return Err(if stderr.is_empty() {
+                format!("Fetch failed (exit status {status}).")
+            } else {
+                format!("Fetch failed: {stderr}")
+            });
+        }
+        if !stderr.is_empty() {
+            Ok(stderr)
+        } else if !stdout.is_empty() {
+            Ok(stdout)
+        } else {
+            Ok(format!("Fetch from {remote} completed. No new updates reported."))
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -44,112 +172,47 @@ fn get_current_branch(repo_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_local_branches(repo_path: String) -> Result<Vec<String>, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .args(["branch", "--format=%(refname:short)"])
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    let branches = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|line| line.to_string())
-        .collect();
-
-    Ok(branches)
+    Ok(
+        run_git(&repo_path, &["branch", "--format=%(refname:short)"])?
+            .lines()
+            .map(str::to_string)
+            .collect(),
+    )
 }
 
 #[tauri::command]
 fn switch_branch(repo_path: String, branch_name: String) -> Result<(), String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("switch")
-        .arg("--")
-        .arg(&branch_name)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
+    run_git(&repo_path, &["switch", "--", &branch_name])?;
     Ok(())
 }
 
 #[tauri::command]
 fn create_branch(repo_path: String, branch_name: String) -> Result<(), String> {
     let name = branch_name.trim();
-
     if name.is_empty() {
         return Err("Branch name cannot be empty.".to_string());
     }
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("branch")
-        .arg(name)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
+    run_git(&repo_path, &["branch", name])?;
     Ok(())
 }
 
 #[tauri::command]
 fn delete_branch(repo_path: String, branch_name: String) -> Result<(), String> {
     let name = branch_name.trim();
-
     if name.is_empty() {
         return Err("Branch name cannot be empty.".to_string());
     }
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("branch")
-        .arg("-d")
-        .arg("--")
-        .arg(name)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
+    run_git(&repo_path, &["branch", "-d", "--", name])?;
     Ok(())
 }
 
 #[tauri::command]
 fn merge_branch(repo_path: String, branch_name: String) -> Result<String, String> {
     let name = branch_name.trim();
-
     if name.is_empty() {
         return Err("Branch name cannot be empty.".to_string());
     }
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("merge")
-        .arg(name)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    run_git(&repo_path, &["merge", name])
 }
 
 #[tauri::command]
@@ -166,17 +229,7 @@ fn get_merge_status(repo_path: String) -> Result<bool, String> {
 
 #[tauri::command]
 fn abort_merge(repo_path: String) -> Result<(), String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .args(["merge", "--abort"])
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
+    run_git(&repo_path, &["merge", "--abort"])?;
     Ok(())
 }
 
@@ -406,75 +459,26 @@ fn get_working_changes(repo_path: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn stage_file(repo_path: String, file_path: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("add")
-        .arg("--")
-        .arg(&file_path)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    run_git(&repo_path, &["add", "--", &file_path])?;
+    Ok(())
 }
 
 #[tauri::command]
 fn stage_all(repo_path: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("add")
-        .arg("-A")
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    run_git(&repo_path, &["add", "-A"])?;
+    Ok(())
 }
 
 #[tauri::command]
 fn unstage_all(repo_path: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("restore")
-        .arg("--staged")
-        .arg("--")
-        .arg(".")
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    run_git(&repo_path, &["restore", "--staged", "--", "."])?;
+    Ok(())
 }
 
 #[tauri::command]
 fn unstage_file(repo_path: String, file_path: String) -> Result<(), String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("restore")
-        .arg("--staged")
-        .arg("--")
-        .arg(&file_path)
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    run_git(&repo_path, &["restore", "--staged", "--", &file_path])?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -532,21 +536,7 @@ fn create_commit(repo_path: String, message: String) -> Result<String, String> {
     if message.trim().is_empty() {
         return Err("Commit message cannot be empty.".to_string());
     }
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&repo_path)
-        .arg("commit")
-        .arg("-m")
-        .arg(&message)
-        .output()
-        .map_err(|error| error.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    run_git(&repo_path, &["commit", "-m", &message])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -554,6 +544,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            get_upstream_status,
+            get_remotes,
+            fetch_remote,
             get_current_branch,
             get_local_branches,
             switch_branch,

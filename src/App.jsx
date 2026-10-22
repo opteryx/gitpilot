@@ -52,6 +52,9 @@ async function fetchCommitHistory(repoPath) {
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branches, setBranches] = useState([]);
+	const [remotes, setRemotes] = useState("");
+	const [upstreamStatus, setUpstreamStatus] = useState("");
+	const [fetchingRemote, setFetchingRemote] = useState("");
 	const [newBranchName, setNewBranchName] = useState("");
 	const [branchCreating, setBranchCreating] = useState(false);
 	const [branchBusy, setBranchBusy] = useState(false);
@@ -68,6 +71,7 @@ function App() {
 	const [diffLoading, setDiffLoading] = useState(false);
 	const [repoLoading, setRepoLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [operationStatus, setOperationStatus] = useState("");
 	const [workingChanges, setWorkingChanges] = useState([]);
 	const [changesLoading, setChangesLoading] = useState(false);
 	const [selectedWorkingFile, setSelectedWorkingFile] = useState(null);
@@ -116,6 +120,47 @@ function App() {
 		}
 	}
 
+	async function refreshUpstreamStatus(path = repoPath) {
+		if (!path) return;
+
+		const status = await invoke("get_upstream_status", {
+			repoPath: path,
+		});
+
+		setUpstreamStatus(status);
+	}
+
+	async function fetchRemote(remoteName) {
+		if (
+			!repoPath ||
+			!remoteName ||
+			fetchingRemote ||
+			repoLoading ||
+			branchBusy
+		)
+			return;
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+		setFetchingRemote(remoteName);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const result = await invoke("fetch_remote", {
+				repoPath: path,
+				remoteName,
+			});
+			if (requestId !== repoRequestId.current) return;
+			await refreshUpstreamStatus(path);
+			setOperationStatus(result);
+		} catch (err) {
+			if (requestId === repoRequestId.current) setError(String(err));
+		} finally {
+			setFetchingRemote("");
+		}
+	}
+
 	async function mergeBranch(branchName) {
 		if (
 			!repoPath ||
@@ -145,6 +190,7 @@ function App() {
 			setBranchBusy(true);
 			setRepoLoading(true);
 			setError("");
+			setOperationStatus("");
 
 			const result = await invoke("merge_branch", {
 				repoPath,
@@ -156,8 +202,11 @@ function App() {
 			setCommits(parsedCommits);
 			clearSelection();
 			await refreshWorkingChanges();
+			await refreshUpstreamStatus();
 
-			console.log("Merge result:", result);
+			setOperationStatus(
+				result.trim() || "Merge completed successfully.",
+			);
 		} catch (err) {
 			setError(String(err));
 			await refreshWorkingChanges();
@@ -315,6 +364,7 @@ function App() {
 			setCommits(parsedCommits);
 			clearSelection();
 			await refreshWorkingChanges();
+			await refreshUpstreamStatus();
 		} catch (err) {
 			setError(String(err));
 		} finally {
@@ -346,6 +396,8 @@ function App() {
 			setRepoLoading(true);
 			setBranch("");
 			setBranches([]);
+			setRemotes("");
+			setUpstreamStatus("");
 			setRepoPath("");
 			setCommits([]);
 			clearSelection();
@@ -355,6 +407,14 @@ function App() {
 			});
 
 			const localBranches = await invoke("get_local_branches", {
+				repoPath: rootPath,
+			});
+
+			const remoteList = await invoke("get_remotes", {
+				repoPath: rootPath,
+			});
+
+			const trackingStatus = await invoke("get_upstream_status", {
 				repoPath: rootPath,
 			});
 
@@ -368,6 +428,8 @@ function App() {
 
 			setBranch(currentBranch);
 			setBranches(localBranches);
+			setRemotes(remoteList);
+			setUpstreamStatus(trackingStatus);
 			setRepoPath(rootPath);
 			setNewBranchName("");
 			setSwitchAfterCreate(true);
@@ -676,6 +738,7 @@ function App() {
 			setCommits(parsedCommits);
 			clearSelection();
 			await refreshWorkingChanges();
+			await refreshUpstreamStatus();
 			await refreshMergeStatus();
 		} catch (err) {
 			setError(String(err));
@@ -877,7 +940,7 @@ function App() {
 							type="button"
 							onClick={loadRepository}
 							className="button-primary"
-							disabled={repoLoading}
+							disabled={repoLoading || Boolean(fetchingRemote)}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
 						</button>
@@ -906,6 +969,63 @@ function App() {
 							</div>
 						)}
 
+						{repoPath && (
+							<div className="remote-list">
+								<h3>Remote Repositories</h3>
+
+								{remotes ? (
+									<div className="remote-entries">
+										{remotes
+											.split("\n")
+											.filter((line) =>
+												line.includes("(fetch)"),
+											)
+											.map((line) => {
+												const [name, url] =
+													line.split(/\s+/);
+
+												return (
+													<div
+														className="remote-entry"
+														key={name}
+													>
+														<strong>{name}</strong>
+														<span title={url}>
+															{url}
+														</span>
+														<button
+															type="button"
+															onClick={() =>
+																fetchRemote(
+																	name,
+																)
+															}
+															disabled={
+																Boolean(
+																	fetchingRemote,
+																) ||
+																repoLoading ||
+																branchBusy ||
+																mergeInProgress
+															}
+														>
+															{fetchingRemote ===
+															name
+																? "Fetching..."
+																: "Fetch"}
+														</button>
+													</div>
+												);
+											})}
+									</div>
+								) : (
+									<p className="placeholder">
+										No remotes configured
+									</p>
+								)}
+							</div>
+						)}
+
 						<h3>Current Branch</h3>
 
 						{branch ? (
@@ -915,6 +1035,26 @@ function App() {
 								No repository selected
 							</p>
 						)}
+
+						{branch &&
+							upstreamStatus &&
+							(() => {
+								const [upstream, ahead, behind] =
+									upstreamStatus.split("|");
+
+								return (
+									<div className="upstream-status">
+										<p>
+											Tracking:{" "}
+											<strong>{upstream}</strong>
+										</p>
+										<p>
+											Ahead: {ahead || "0"} · Behind:{" "}
+											{behind || "0"}
+										</p>
+									</div>
+								);
+							})()}
 
 						{branches.length > 0 && (
 							<div className="branch-list">
@@ -1040,6 +1180,19 @@ function App() {
 											: "Create Branch"}
 									</button>
 								</div>
+							</div>
+						)}
+
+						{operationStatus && (
+							<div className="operation-status" role="status">
+								<strong>Operation Status</strong>
+								<p>{operationStatus}</p>
+								<button
+									type="button"
+									onClick={() => setOperationStatus("")}
+								>
+									Dismiss
+								</button>
 							</div>
 						)}
 

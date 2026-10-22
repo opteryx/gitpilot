@@ -153,6 +153,29 @@ button {
 	overflow-wrap: anywhere;
 }
 
+.remote-entries {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.remote-entry {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	font-size: 13px;
+}
+
+.remote-entry strong {
+	color: #245c91;
+}
+
+.remote-entry span {
+	overflow-wrap: anywhere;
+	color: #555;
+	line-height: 1.4;
+}
+
 .branch-name {
 	font-size: 14px;
 	font-weight: 600;
@@ -273,6 +296,31 @@ button {
 	color: #a42620;
 	font-size: 12px;
 	overflow-wrap: anywhere;
+}
+
+.operation-status {
+	margin-top: 16px;
+	padding: 12px;
+	background-color: #e8f3ea;
+	border: 1px solid #a3c9aa;
+	border-radius: 6px;
+	color: #245c32;
+	font-size: 13px;
+}
+
+.operation-status strong {
+	display: block;
+	margin-bottom: 6px;
+}
+
+.operation-status p {
+	margin: 0 0 10px;
+	line-height: 1.5;
+}
+
+.operation-status button {
+	padding: 4px 10px;
+	font-size: 12px;
 }
 
 .error-message strong {
@@ -1062,4 +1110,14 @@ button:not(
 	font-size: 12px;
 	line-height: 1.5;
 	color: #3b4552;
+}
+
+.upstream-status {
+	margin-top: 8px;
+	font-size: 13px;
+	color: #555;
+}
+
+.upstream-status p {
+	margin: 3px 0;
 }
