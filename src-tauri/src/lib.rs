@@ -63,6 +63,139 @@ fn get_remotes(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["remote", "-v"])
 }
 
+#[tauri::command]
+async fn push_current_branch(repo_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let branch = run_git(&repo_path, &["branch", "--show-current"])?;
+
+        if branch.is_empty() {
+            return Err("Cannot push: HEAD is detached.".to_string());
+        }
+
+        let upstream = run_git(
+            &repo_path,
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}",
+            ],
+        )
+        .map_err(|_| {
+            "This branch has no upstream configured. Set an upstream before pushing.".to_string()
+        })?;
+
+        // An upstream normally has the form "origin/main".
+        // Resolve the configured remote and its branch separately.
+        let (remote, remote_branch) = upstream.split_once('/').ok_or_else(|| {
+            format!("Unable to identify the remote branch from '{upstream}'.")
+        })?;
+
+        // Verify that the remote exists.
+        let remotes = run_git(&repo_path, &["remote"])?;
+        if !remotes.lines().any(|name| name == remote) {
+            return Err(format!("Remote '{remote}' is not configured."));
+        }
+
+        let refspec = format!("refs/heads/{branch}:refs/heads/{remote_branch}");
+
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .args(["-c", "credential.helper="])
+            .args(["-c", "core.askPass="])
+            .args(["-c", "http.lowSpeedLimit=1000"])
+            .args(["-c", "http.lowSpeedTime=20"])
+            .args(["push", "--porcelain", "--", remote, &refspec])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
+            .env("GIT_ASKPASS", "false")
+            .env("SSH_ASKPASS", "false")
+            .env(
+                "GIT_SSH_COMMAND",
+                "ssh -o BatchMode=yes -o ConnectTimeout=10",
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Unable to start Git push: {error}"))?;
+
+        // Read both output streams while Git runs.
+        let mut stdout = child.stdout.take().ok_or("Missing push stdout")?;
+        let mut stderr = child.stderr.take().ok_or("Missing push stderr")?;
+
+        let stdout_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        let stderr_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        // Allow Git up to 45 seconds to finish.
+        let started = Instant::now();
+        let timeout = Duration::from_secs(45);
+
+        let (status, timed_out) = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status, false),
+
+                Ok(None) if started.elapsed() >= timeout => {
+                    let _ = child.kill();
+                    let status = child.wait().map_err(|error| error.to_string())?;
+                    break (status, true);
+                }
+
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Unable to monitor Git push: {error}"));
+                }
+            }
+        };
+
+        let stdout = stdout_reader
+            .join()
+            .map_err(|_| "Unable to read Git push output".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stderr = stderr_reader
+            .join()
+            .map_err(|_| "Unable to read Git push errors".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+
+        if timed_out {
+            return Err(
+                "Push timed out after 45 seconds. Check your network connection and Git credentials."
+                    .to_string(),
+            );
+        }
+
+        if !status.success() {
+            return Err(if stderr.is_empty() {
+                format!("Push failed (exit status {status}). {stdout}")
+            } else {
+                format!("Push failed: {stderr}")
+            });
+        }
+
+        Ok(format!(
+            "Successfully pushed branch '{}' to '{}'.",
+            branch, upstream
+        ))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 // Fetch runs on a blocking worker, not the Tauri UI thread. Credentials are
 // intentionally noninteractive for now; a future login flow can be added.
 #[tauri::command]
@@ -547,6 +680,7 @@ pub fn run() {
             get_upstream_status,
             get_remotes,
             fetch_remote,
+            push_current_branch,
             get_current_branch,
             get_local_branches,
             switch_branch,

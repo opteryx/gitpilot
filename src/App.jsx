@@ -55,6 +55,7 @@ function App() {
 	const [remotes, setRemotes] = useState("");
 	const [upstreamStatus, setUpstreamStatus] = useState("");
 	const [fetchingRemote, setFetchingRemote] = useState("");
+	const [pushingBranch, setPushingBranch] = useState(false);
 	const [newBranchName, setNewBranchName] = useState("");
 	const [branchCreating, setBranchCreating] = useState(false);
 	const [branchBusy, setBranchBusy] = useState(false);
@@ -158,6 +159,27 @@ function App() {
 			if (requestId === repoRequestId.current) setError(String(err));
 		} finally {
 			setFetchingRemote("");
+		}
+	}
+
+	async function pushCurrentBranch() {
+		if (!repoPath) return;
+
+		setPushingBranch(true);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const message = await invoke("push_current_branch", {
+				repoPath,
+			});
+
+			setOperationStatus(message);
+			await refreshUpstreamStatus(repoPath);
+		} catch (error) {
+			setError(String(error));
+		} finally {
+			setPushingBranch(false);
 		}
 	}
 
@@ -1013,6 +1035,29 @@ function App() {
 															name
 																? "Fetching..."
 																: "Fetch"}
+														</button>
+														<button
+															type="button"
+															onClick={
+																pushCurrentBranch
+															}
+															disabled={
+																!repoPath ||
+																!branch ||
+																pushingBranch ||
+																Boolean(
+																	fetchingRemote,
+																) ||
+																!upstreamStatus ||
+																repoLoading ||
+																branchBusy ||
+																mergeInProgress
+															}
+															title="Push the current branch to its configured upstream branch"
+														>
+															{pushingBranch
+																? "Pushing..."
+																: "Push"}
 														</button>
 													</div>
 												);
