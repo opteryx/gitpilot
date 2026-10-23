@@ -395,6 +395,64 @@ function App() {
 		}
 	}
 
+	async function refreshRepository() {
+		if (
+			!repoPath ||
+			repoLoading ||
+			pushingBranch ||
+			fetchingRemote ||
+			branchBusy
+		) {
+			return;
+		}
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+
+		setRepoLoading(true);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const [
+				currentBranch,
+				localBranches,
+				remoteList,
+				trackingStatus,
+				history,
+			] = await Promise.all([
+				invoke("get_current_branch", { repoPath: path }),
+				invoke("get_local_branches", { repoPath: path }),
+				invoke("get_remotes", { repoPath: path }),
+				invoke("get_upstream_status", { repoPath: path }),
+				invoke("get_commit_history", { repoPath: path }),
+			]);
+
+			if (requestId !== repoRequestId.current) return;
+
+			setBranch(currentBranch);
+			setBranches(localBranches);
+			setRemotes(remoteList);
+			setUpstreamStatus(trackingStatus);
+			setCommits(parseCommitHistory(history));
+
+			await Promise.all([
+				refreshWorkingChanges(path),
+				refreshMergeStatus(path),
+			]);
+
+			setOperationStatus("Repository refreshed.");
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			if (requestId === repoRequestId.current) {
+				setRepoLoading(false);
+			}
+		}
+	}
+
 	async function loadRepository() {
 		try {
 			const selectedPath = await open({
@@ -965,6 +1023,22 @@ function App() {
 							disabled={repoLoading || Boolean(fetchingRemote)}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
+						</button>
+
+						<button
+							type="button"
+							onClick={refreshRepository}
+							disabled={
+								!repoPath ||
+								repoLoading ||
+								pushingBranch ||
+								Boolean(fetchingRemote) ||
+								branchBusy ||
+								mergeInProgress
+							}
+							title="Refresh repository information without contacting the remote server"
+						>
+							{repoLoading ? "Refreshing..." : "Refresh"}
 						</button>
 
 						{repoPath && (

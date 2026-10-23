@@ -1121,3 +1121,8 @@ button:not(
 .upstream-status p {
 	margin: 3px 0;
 }
+
+/* Spacing between repository action buttons */
+.sidebar > button + button {
+	margin-top: 4px;
+}
