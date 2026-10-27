@@ -196,6 +196,88 @@ async fn push_current_branch(repo_path: String) -> Result<String, String> {
     .map_err(|error| error.to_string())?
 }
 
+// Check whether the repository is ready for a fast-forward-only pull.
+fn check_pull_safety(repo_path: &str) -> Result<(), String> {
+    // Refuse to pull while a merge is in progress.
+    let merge_head = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if merge_head.status.success() {
+        return Err(
+            "Cannot pull while a merge is in progress. Complete or abort the merge first."
+                .to_string(),
+        );
+    }
+
+    // Require a clean working directory and staging area.
+    let changes = run_git(repo_path, &["status", "--porcelain"])?;
+
+    if !changes.is_empty() {
+        return Err(
+            "Cannot pull with uncommitted changes. Commit or discard your changes first."
+                .to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn pull_current_branch(repo_path: String) -> Result<String, String> {
+    // Check repository safety and identify the upstream remote.
+    let check_path = repo_path.clone();
+
+    let (branch, remote) = tauri::async_runtime::spawn_blocking(move || {
+        check_pull_safety(&check_path)?;
+
+        let branch = run_git(&check_path, &["branch", "--show-current"])?;
+
+        if branch.is_empty() {
+            return Err("Cannot pull: HEAD is detached.".to_string());
+        }
+
+        let upstream = run_git(
+            &check_path,
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}",
+            ],
+        )
+        .map_err(|_| "Cannot pull: this branch has no upstream configured.".to_string())?;
+
+        let (remote, _) = upstream
+            .split_once('/')
+            .ok_or_else(|| format!("Cannot identify the remote for upstream '{upstream}'."))?;
+
+        Ok::<(String, String), String>((branch, remote.to_string()))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+
+    // Use our existing Fetch command, including its authentication
+    // safeguards and 45-second timeout.
+    fetch_remote(repo_path.clone(), remote).await?;
+
+    // Apply fetched changes locally, only if fast-forward is possible.
+    tauri::async_runtime::spawn_blocking(move || {
+        check_pull_safety(&repo_path)?;
+
+        run_git(&repo_path, &["merge", "--ff-only", "@{upstream}"])?;
+
+        Ok(format!(
+            "Pull completed successfully for branch '{branch}'."
+        ))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 // Fetch runs on a blocking worker, not the Tauri UI thread. Credentials are
 // intentionally noninteractive for now; a future login flow can be added.
 #[tauri::command]
@@ -681,6 +763,7 @@ pub fn run() {
             get_remotes,
             fetch_remote,
             push_current_branch,
+            pull_current_branch,
             get_current_branch,
             get_local_branches,
             switch_branch,

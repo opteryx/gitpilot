@@ -56,6 +56,7 @@ function App() {
 	const [upstreamStatus, setUpstreamStatus] = useState("");
 	const [fetchingRemote, setFetchingRemote] = useState("");
 	const [pushingBranch, setPushingBranch] = useState(false);
+	const [pullingBranch, setPullingBranch] = useState(false);
 	const [newBranchName, setNewBranchName] = useState("");
 	const [branchCreating, setBranchCreating] = useState(false);
 	const [branchBusy, setBranchBusy] = useState(false);
@@ -136,6 +137,8 @@ function App() {
 			!repoPath ||
 			!remoteName ||
 			fetchingRemote ||
+			pushingBranch ||
+			pullingBranch ||
 			repoLoading ||
 			branchBusy
 		)
@@ -180,6 +183,45 @@ function App() {
 			setError(String(error));
 		} finally {
 			setPushingBranch(false);
+		}
+	}
+
+	async function pullCurrentBranch() {
+		if (
+			!repoPath ||
+			pullingBranch ||
+			pushingBranch ||
+			fetchingRemote ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress
+		) {
+			return;
+		}
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+
+		setPullingBranch(true);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const message = await invoke("pull_current_branch", {
+				repoPath: path,
+			});
+
+			if (requestId !== repoRequestId.current) return;
+
+			await refreshRepository();
+
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			setPullingBranch(false);
 		}
 	}
 
@@ -1020,7 +1062,12 @@ function App() {
 							type="button"
 							onClick={loadRepository}
 							className="button-primary"
-							disabled={repoLoading || Boolean(fetchingRemote)}
+							disabled={
+								repoLoading ||
+								Boolean(fetchingRemote) ||
+								pushingBranch ||
+								pullingBranch
+							}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
 						</button>
@@ -1100,6 +1147,8 @@ function App() {
 																Boolean(
 																	fetchingRemote,
 																) ||
+																pullingBranch ||
+																pushingBranch ||
 																repoLoading ||
 																branchBusy ||
 																mergeInProgress
@@ -1119,6 +1168,7 @@ function App() {
 																!repoPath ||
 																!branch ||
 																pushingBranch ||
+																pullingBranch ||
 																Boolean(
 																	fetchingRemote,
 																) ||
@@ -1132,6 +1182,30 @@ function App() {
 															{pushingBranch
 																? "Pushing..."
 																: "Push"}
+														</button>
+														<button
+															type="button"
+															onClick={
+																pullCurrentBranch
+															}
+															disabled={
+																!repoPath ||
+																!branch ||
+																!upstreamStatus ||
+																pullingBranch ||
+																pushingBranch ||
+																Boolean(
+																	fetchingRemote,
+																) ||
+																repoLoading ||
+																branchBusy ||
+																mergeInProgress
+															}
+															title="Download and fast-forward the current branch from its upstream"
+														>
+															{pullingBranch
+																? "Pulling..."
+																: "Pull"}
 														</button>
 													</div>
 												);
