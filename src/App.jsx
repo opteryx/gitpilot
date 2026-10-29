@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
@@ -83,9 +83,47 @@ function App() {
 
 	// Separate request IDs prevent stale asynchronous results.
 	const repoRequestId = useRef(0);
+	const refreshRepositoryRef = useRef(null);
+	const focusRefreshInProgress = useRef(false);
+	const focusRefreshAllowed = useRef(false);
 	const commitRequestId = useRef(0);
 	const fileRequestId = useRef(0);
 	const workingChangesRequestId = useRef(0);
+
+	// Keep the focus listener informed of the latest repository state.
+	focusRefreshAllowed.current =
+		Boolean(repoPath) &&
+		!repoLoading &&
+		!fetchingRemote &&
+		!pushingBranch &&
+		!pullingBranch &&
+		!branchBusy &&
+		!commitLoading &&
+		!mergeInProgress;
+
+	// Refresh the repository when GitPilot regains focus.
+	useEffect(() => {
+		function handleWindowFocus() {
+			if (
+				!focusRefreshAllowed.current ||
+				focusRefreshInProgress.current
+			) {
+				return;
+			}
+
+			focusRefreshInProgress.current = true;
+
+			Promise.resolve(refreshRepositoryRef.current?.()).finally(() => {
+				focusRefreshInProgress.current = false;
+			});
+		}
+
+		window.addEventListener("focus", handleWindowFocus);
+
+		return () => {
+			window.removeEventListener("focus", handleWindowFocus);
+		};
+	}, []);
 
 	function isConflicted(file) {
 		return ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(
@@ -494,6 +532,8 @@ function App() {
 			}
 		}
 	}
+
+	refreshRepositoryRef.current = refreshRepository;
 
 	async function loadRepository() {
 		try {
