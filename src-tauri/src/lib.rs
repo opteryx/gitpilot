@@ -380,6 +380,158 @@ async fn fetch_remote(repo_path: String, remote_name: String) -> Result<String, 
     .map_err(|error| error.to_string())?
 }
 
+// Clone a remote repository into a new local folder.
+#[tauri::command]
+async fn clone_repository(
+    repository_url: String,
+    destination: String,
+    folder_name: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::path::{Component, Path};
+
+        let url = repository_url.trim();
+        let name = folder_name.trim();
+
+        // Validate the repository URL.
+        if url.is_empty() || url.starts_with('-') {
+            return Err("Enter a valid repository URL.".to_string());
+        }
+
+        // Require a single folder name, not a path.
+        let mut components = Path::new(name).components();
+
+        if name.is_empty()
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains(':')
+            || name.starts_with('-')
+            || !matches!(components.next(), Some(Component::Normal(_)))
+            || components.next().is_some()
+        {
+            return Err("Enter a valid repository folder name.".to_string());
+        }
+
+        // The destination must be an existing directory.
+        let parent = Path::new(destination.trim())
+            .canonicalize()
+            .map_err(|error| format!("Invalid destination folder: {error}"))?;
+
+        if !parent.is_dir() {
+            return Err("The destination must be a directory.".to_string());
+        }
+
+        let target = parent.join(name);
+
+        // Never overwrite an existing folder.
+        if target.exists() {
+            return Err(format!(
+                "The destination folder '{}' already exists.",
+                target.display()
+            ));
+        }
+
+        // Launch Git without involving a command shell.
+        let mut child = Command::new("git")
+            .args(["-c", "credential.helper="])
+            .args(["-c", "core.askPass="])
+            .args(["-c", "http.lowSpeedLimit=1000"])
+            .args(["-c", "http.lowSpeedTime=20"])
+            .arg("clone")
+            .arg("--")
+            .arg(url)
+            .arg(&target)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
+            .env("GIT_ASKPASS", "false")
+            .env("SSH_ASKPASS", "false")
+            .env(
+                "GIT_SSH_COMMAND",
+                "ssh -o BatchMode=yes -o ConnectTimeout=10",
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Unable to start Git clone: {error}"))?;
+
+        // Read stdout and stderr concurrently to avoid blocking.
+        let mut stdout = child.stdout.take().ok_or("Missing clone stdout")?;
+        let mut stderr = child.stderr.take().ok_or("Missing clone stderr")?;
+
+        let stdout_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        let stderr_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        // Allow up to two minutes for the clone.
+        let started = Instant::now();
+        let timeout = Duration::from_secs(120);
+
+        let (status, timed_out) = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status, false),
+
+                Ok(None) if started.elapsed() >= timeout => {
+                    let _ = child.kill();
+                    let status = child.wait().map_err(|error| error.to_string())?;
+                    break (status, true);
+                }
+
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Unable to monitor Git clone: {error}"));
+                }
+            }
+        };
+
+        let stdout = stdout_reader
+            .join()
+            .map_err(|_| "Unable to read Git clone output".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stderr = stderr_reader
+            .join()
+            .map_err(|_| "Unable to read Git clone errors".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+
+        if timed_out {
+            return Err("Clone timed out after 120 seconds. \
+                 Check your network connection and Git credentials. \
+                 A partial destination folder may remain."
+                .to_string());
+        }
+
+        if !status.success() {
+            return Err(if stderr.is_empty() {
+                format!("Clone failed (exit status {status}). {stdout}")
+            } else {
+                format!("Clone failed: {stderr}")
+            });
+        }
+
+        // Return the cloned directory path for GitPilot to open.
+        let cloned_path = target
+            .canonicalize()
+            .map_err(|error| format!("Clone completed, but cannot locate the folder: {error}"))?;
+
+        Ok(cloned_path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 fn get_current_branch(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["branch", "--show-current"])
@@ -764,6 +916,7 @@ pub fn run() {
             fetch_remote,
             push_current_branch,
             pull_current_branch,
+            clone_repository,
             get_current_branch,
             get_local_branches,
             switch_branch,

@@ -49,6 +49,16 @@ async function fetchCommitHistory(repoPath) {
 	return parseCommitHistory(history);
 }
 
+function getRepositoryName(url) {
+	const trimmed = url.trim().replace(/\/+$/, "");
+
+	if (!trimmed) return "";
+
+	const lastPart = trimmed.split(/[/:]/).pop();
+
+	return lastPart.replace(/\.git$/i, "");
+}
+
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branches, setBranches] = useState([]);
@@ -63,6 +73,12 @@ function App() {
 	const [mergeInProgress, setMergeInProgress] = useState(false);
 	const [switchAfterCreate, setSwitchAfterCreate] = useState(true);
 	const [repoPath, setRepoPath] = useState("");
+	const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+	const [cloneUrl, setCloneUrl] = useState("");
+	const [cloneDestination, setCloneDestination] = useState("");
+	const [cloneFolderName, setCloneFolderName] = useState("");
+	const [cloneLoading, setCloneLoading] = useState(false);
+	const [cloneError, setCloneError] = useState("");
 	const [commits, setCommits] = useState([]);
 	const [selectedCommit, setSelectedCommit] = useState(null);
 	const [selectedCommitMessage, setSelectedCommitMessage] = useState("");
@@ -535,26 +551,74 @@ function App() {
 
 	refreshRepositoryRef.current = refreshRepository;
 
-	async function loadRepository() {
+	async function handleCloneRepository() {
+		if (cloneLoading) return;
+
+		setCloneLoading(true);
+		setCloneError("");
+
+		try {
+			const clonedPath = await invoke("clone_repository", {
+				repositoryUrl: cloneUrl.trim(),
+				destination: cloneDestination,
+				folderName: cloneFolderName.trim(),
+			});
+
+			setCloneDialogOpen(false);
+
+			// Open the newly cloned repository automatically.
+			const opened = await openRepositoryAtPath(clonedPath);
+
+			if (opened) {
+				setOperationStatus(
+					`Repository cloned and opened: ${clonedPath}`,
+				);
+			} else {
+				setError(
+					`Repository cloned successfully to ${clonedPath}, ` +
+						"but GitPilot could not open it automatically.",
+				);
+			}
+
+			setCloneUrl("");
+			setCloneDestination("");
+			setCloneFolderName("");
+		} catch (err) {
+			setCloneError(String(err));
+		} finally {
+			setCloneLoading(false);
+		}
+	}
+
+	async function browseCloneDestination() {
 		try {
 			const selectedPath = await open({
 				directory: true,
 				multiple: false,
-				title: "Open Git Repository",
-				defaultPath: repoPath || undefined,
+				title: "Choose Clone Destination",
+				defaultPath: cloneDestination || undefined,
 			});
 
-			if (!selectedPath) return;
+			if (selectedPath) {
+				setCloneDestination(selectedPath);
+			}
+		} catch (err) {
+			setError(String(err));
+		}
+	}
 
-			const id = ++repoRequestId.current;
+	async function openRepositoryAtPath(selectedPath) {
+		const id = ++repoRequestId.current;
 
+		try {
 			const rootPath = await invoke("get_repository_root", {
 				repoPath: selectedPath,
 			});
 
-			if (id !== repoRequestId.current) return;
+			if (id !== repoRequestId.current) return false;
 
 			setError("");
+			setOperationStatus("");
 			setRepoLoading(true);
 			setBranch("");
 			setBranches([]);
@@ -584,9 +648,7 @@ function App() {
 				repoPath: rootPath,
 			});
 
-			if (id !== repoRequestId.current) return;
-
-			const parsedCommits = parseCommitHistory(history);
+			if (id !== repoRequestId.current) return false;
 
 			setBranch(currentBranch);
 			setBranches(localBranches);
@@ -595,18 +657,44 @@ function App() {
 			setRepoPath(rootPath);
 			setNewBranchName("");
 			setSwitchAfterCreate(true);
-			setCommits(parsedCommits);
+			setCommits(parseCommitHistory(history));
+
 			workingChangesRequestId.current += 1;
 			setWorkingChanges([]);
 			setMergeInProgress(false);
+
 			await Promise.all([
 				refreshWorkingChanges(rootPath),
 				refreshMergeStatus(rootPath),
 			]);
+
+			return true;
+		} catch (err) {
+			if (id === repoRequestId.current) {
+				setError(String(err));
+			}
+			return false;
+		} finally {
+			if (id === repoRequestId.current) {
+				setRepoLoading(false);
+			}
+		}
+	}
+
+	async function loadRepository() {
+		try {
+			const selectedPath = await open({
+				directory: true,
+				multiple: false,
+				title: "Open Git Repository",
+				defaultPath: repoPath || undefined,
+			});
+
+			if (!selectedPath) return;
+
+			await openRepositoryAtPath(selectedPath);
 		} catch (err) {
 			setError(String(err));
-		} finally {
-			setRepoLoading(false);
 		}
 	}
 
@@ -1110,6 +1198,21 @@ function App() {
 							}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
+						</button>
+
+						<button
+							type="button"
+							onClick={() => setCloneDialogOpen(true)}
+							disabled={
+								repoLoading ||
+								Boolean(fetchingRemote) ||
+								pushingBranch ||
+								pullingBranch ||
+								branchBusy
+							}
+							title="Copy an existing remote Git repository to your computer"
+						>
+							Clone Repository
 						</button>
 
 						<button
@@ -1931,6 +2034,105 @@ function App() {
 					</aside>
 				</div>
 			</main>
+			{cloneDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="clone-dialog-title"
+					>
+						<h2 id="clone-dialog-title">Clone Repository</h2>
+
+						<label htmlFor="clone-url">Repository URL</label>
+						<input
+							id="clone-url"
+							disabled={cloneLoading}
+							type="text"
+							placeholder="git@github.com:user/repository.git"
+							value={cloneUrl}
+							onChange={(event) => {
+								const url = event.target.value;
+								const previousSuggestion =
+									getRepositoryName(cloneUrl);
+
+								setCloneUrl(url);
+
+								if (
+									!cloneFolderName ||
+									cloneFolderName === previousSuggestion
+								) {
+									setCloneFolderName(getRepositoryName(url));
+								}
+							}}
+						/>
+
+						<label htmlFor="clone-destination">
+							Destination Folder
+						</label>
+						<div className="clone-destination-row">
+							<input
+								id="clone-destination"
+								type="text"
+								placeholder="Select a parent folder..."
+								value={cloneDestination}
+								readOnly
+							/>
+							<button
+								type="button"
+								onClick={browseCloneDestination}
+								disabled={cloneLoading}
+							>
+								Browse
+							</button>
+						</div>
+
+						<label htmlFor="clone-folder-name">
+							Repository Folder Name
+						</label>
+						<input
+							id="clone-folder-name"
+							disabled={cloneLoading}
+							type="text"
+							placeholder="my-repository"
+							value={cloneFolderName}
+							onChange={(event) =>
+								setCloneFolderName(event.target.value)
+							}
+						/>
+
+						{cloneError && (
+							<p role="alert" className="clone-error">
+								{cloneError}
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setCloneDialogOpen(false)}
+								disabled={cloneLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handleCloneRepository}
+								disabled={
+									cloneLoading ||
+									!cloneUrl.trim() ||
+									!cloneDestination ||
+									!cloneFolderName.trim()
+								}
+							>
+								{cloneLoading ? "Cloning..." : "Clone"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
 		</div>
 	);
 }
