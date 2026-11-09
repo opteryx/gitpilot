@@ -73,6 +73,11 @@ function App() {
 	const [mergeInProgress, setMergeInProgress] = useState(false);
 	const [switchAfterCreate, setSwitchAfterCreate] = useState(true);
 	const [repoPath, setRepoPath] = useState("");
+	const [addRemoteDialogOpen, setAddRemoteDialogOpen] = useState(false);
+	const [newRemoteName, setNewRemoteName] = useState("origin");
+	const [newRemoteUrl, setNewRemoteUrl] = useState("");
+	const [addRemoteLoading, setAddRemoteLoading] = useState(false);
+	const [addRemoteError, setAddRemoteError] = useState("");
 	const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
 	const [cloneUrl, setCloneUrl] = useState("");
 	const [cloneDestination, setCloneDestination] = useState("");
@@ -550,6 +555,39 @@ function App() {
 	}
 
 	refreshRepositoryRef.current = refreshRepository;
+
+	async function handleAddRemote() {
+		if (!repoPath || addRemoteLoading) return;
+
+		setAddRemoteLoading(true);
+		setAddRemoteError("");
+
+		try {
+			const message = await invoke("add_remote", {
+				repoPath,
+				remoteName: newRemoteName.trim(),
+				remoteUrl: newRemoteUrl.trim(),
+			});
+
+			// Refresh the list of configured remotes.
+			const remoteList = await invoke("get_remotes", {
+				repoPath,
+			});
+
+			setRemotes(remoteList);
+			setAddRemoteDialogOpen(false);
+			setOperationStatus(message);
+
+			// Reset the dialog for future use.
+			setNewRemoteName("origin");
+			setNewRemoteUrl("");
+			setAddRemoteError("");
+		} catch (err) {
+			setAddRemoteError(String(err));
+		} finally {
+			setAddRemoteLoading(false);
+		}
+	}
 
 	async function handleCloneRepository() {
 		if (cloneLoading) return;
@@ -1258,6 +1296,21 @@ function App() {
 						{repoPath && (
 							<div className="remote-list">
 								<h3>Remote Repositories</h3>
+
+								<button
+									type="button"
+									onClick={() => setAddRemoteDialogOpen(true)}
+									disabled={
+										repoLoading ||
+										Boolean(fetchingRemote) ||
+										pushingBranch ||
+										pullingBranch ||
+										branchBusy
+									}
+									title="Connect this local repository to a remote Git repository"
+								>
+									Add Remote
+								</button>
 
 								{remotes ? (
 									<div className="remote-entries">
@@ -2128,6 +2181,72 @@ function App() {
 								}
 							>
 								{cloneLoading ? "Cloning..." : "Clone"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
+
+			{addRemoteDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="add-remote-dialog-title"
+					>
+						<h2 id="add-remote-dialog-title">Add Remote</h2>
+
+						<label htmlFor="new-remote-name">Remote Name</label>
+						<input
+							id="new-remote-name"
+							type="text"
+							placeholder="origin"
+							value={newRemoteName}
+							onChange={(event) =>
+								setNewRemoteName(event.target.value)
+							}
+							disabled={addRemoteLoading}
+						/>
+
+						<label htmlFor="new-remote-url">Repository URL</label>
+						<input
+							id="new-remote-url"
+							type="text"
+							placeholder="git@github.com:user/repository.git"
+							value={newRemoteUrl}
+							onChange={(event) =>
+								setNewRemoteUrl(event.target.value)
+							}
+							disabled={addRemoteLoading}
+						/>
+
+						{addRemoteError && (
+							<p className="clone-error" role="alert">
+								{addRemoteError}
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setAddRemoteDialogOpen(false)}
+								disabled={addRemoteLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handleAddRemote}
+								disabled={
+									addRemoteLoading ||
+									!newRemoteName.trim() ||
+									!newRemoteUrl.trim()
+								}
+							>
+								{addRemoteLoading ? "Adding..." : "Add Remote"}
 							</button>
 						</div>
 					</section>

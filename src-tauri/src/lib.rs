@@ -64,6 +64,47 @@ fn get_remotes(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn add_remote(
+    repo_path: String,
+    remote_name: String,
+    remote_url: String,
+) -> Result<String, String> {
+    let name = remote_name.trim();
+    let url = remote_url.trim();
+
+    if name.is_empty() || name.starts_with('-') {
+        return Err("Enter a valid remote name.".to_string());
+    }
+
+    if url.is_empty() || url.starts_with('-') {
+        return Err("Enter a valid remote repository URL.".to_string());
+    }
+
+    // Validate the name using Git's own naming rules.
+    run_git(
+        &repo_path,
+        &[
+            "check-ref-format",
+            "--allow-onelevel",
+            &format!("refs/remotes/{name}"),
+        ],
+    )
+    .map_err(|_| "Invalid remote name.".to_string())?;
+
+    // Prevent duplicate remote names.
+    let existing = run_git(&repo_path, &["remote"])?;
+
+    if existing.lines().any(|remote| remote == name) {
+        return Err(format!("Remote '{name}' already exists."));
+    }
+
+    // Add the remote without fetching or pushing any data.
+    run_git(&repo_path, &["remote", "add", name, url])?;
+
+    Ok(format!("Remote '{name}' added successfully."))
+}
+
+#[tauri::command]
 async fn push_current_branch(repo_path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let branch = run_git(&repo_path, &["branch", "--show-current"])?;
@@ -913,6 +954,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_upstream_status,
             get_remotes,
+            add_remote,
             fetch_remote,
             push_current_branch,
             pull_current_branch,
