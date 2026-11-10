@@ -105,6 +105,57 @@ fn add_remote(
 }
 
 #[tauri::command]
+fn update_remote_url(
+    repo_path: String,
+    remote_name: String,
+    remote_url: String,
+) -> Result<String, String> {
+    let name = remote_name.trim();
+    let url = remote_url.trim();
+
+    if name.is_empty() || name.starts_with('-') {
+        return Err("Invalid remote name.".to_string());
+    }
+
+    if url.is_empty() || url.starts_with('-') {
+        return Err("Enter a valid remote repository URL.".to_string());
+    }
+
+    // Confirm that the remote exists.
+    let existing = run_git(&repo_path, &["remote"])?;
+
+    if !existing.lines().any(|remote| remote == name) {
+        return Err(format!("Remote '{name}' does not exist."));
+    }
+
+    // Update only the URL. No fetch or push is performed.
+    run_git(&repo_path, &["remote", "set-url", name, url])?;
+
+    Ok(format!("Remote '{name}' URL updated successfully."))
+}
+
+#[tauri::command]
+fn remove_remote(repo_path: String, remote_name: String) -> Result<String, String> {
+    let name = remote_name.trim();
+
+    if name.is_empty() || name.starts_with('-') {
+        return Err("Invalid remote name.".to_string());
+    }
+
+    // Confirm that the remote exists.
+    let existing = run_git(&repo_path, &["remote"])?;
+
+    if !existing.lines().any(|remote| remote == name) {
+        return Err(format!("Remote '{name}' does not exist."));
+    }
+
+    // Remove the remote from the local Git configuration.
+    run_git(&repo_path, &["remote", "remove", name])?;
+
+    Ok(format!("Remote '{name}' removed successfully."))
+}
+
+#[tauri::command]
 async fn push_current_branch(repo_path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let branch = run_git(&repo_path, &["branch", "--show-current"])?;
@@ -955,6 +1006,8 @@ pub fn run() {
             get_upstream_status,
             get_remotes,
             add_remote,
+            update_remote_url,
+            remove_remote,
             fetch_remote,
             push_current_branch,
             pull_current_branch,

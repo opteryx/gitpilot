@@ -73,6 +73,11 @@ function App() {
 	const [mergeInProgress, setMergeInProgress] = useState(false);
 	const [switchAfterCreate, setSwitchAfterCreate] = useState(true);
 	const [repoPath, setRepoPath] = useState("");
+	const [editRemoteDialogOpen, setEditRemoteDialogOpen] = useState(false);
+	const [editingRemoteName, setEditingRemoteName] = useState("");
+	const [editingRemoteUrl, setEditingRemoteUrl] = useState("");
+	const [editRemoteLoading, setEditRemoteLoading] = useState(false);
+	const [editRemoteError, setEditRemoteError] = useState("");
 	const [addRemoteDialogOpen, setAddRemoteDialogOpen] = useState(false);
 	const [newRemoteName, setNewRemoteName] = useState("origin");
 	const [newRemoteUrl, setNewRemoteUrl] = useState("");
@@ -555,6 +560,87 @@ function App() {
 	}
 
 	refreshRepositoryRef.current = refreshRepository;
+
+	async function removeRemote(remoteName) {
+		if (!repoPath || !remoteName) return;
+
+		const confirmed = await ask(
+			`Remove remote "${remoteName}"?\n\n` +
+				"This will remove the remote connection from the local repository.\n\n" +
+				"The repository on GitHub will NOT be deleted.",
+			{
+				title: "Remove Remote",
+				kind: "warning",
+				okLabel: "Remove",
+				cancelLabel: "Cancel",
+			},
+		);
+
+		if (!confirmed) return;
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+
+		setBranchBusy(true);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const message = await invoke("remove_remote", {
+				repoPath: path,
+				remoteName,
+			});
+
+			// Reload remotes and upstream information.
+			const [remoteList, trackingStatus] = await Promise.all([
+				invoke("get_remotes", { repoPath: path }),
+				invoke("get_upstream_status", { repoPath: path }),
+			]);
+
+			if (requestId !== repoRequestId.current) return;
+
+			setRemotes(remoteList);
+			setUpstreamStatus(trackingStatus);
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			setBranchBusy(false);
+		}
+	}
+
+	async function handleUpdateRemoteUrl() {
+		if (!repoPath || editRemoteLoading) return;
+
+		setEditRemoteLoading(true);
+		setEditRemoteError("");
+
+		try {
+			const message = await invoke("update_remote_url", {
+				repoPath,
+				remoteName: editingRemoteName,
+				remoteUrl: editingRemoteUrl.trim(),
+			});
+
+			// Refresh the displayed remote list.
+			const remoteList = await invoke("get_remotes", {
+				repoPath,
+			});
+
+			setRemotes(remoteList);
+			setEditRemoteDialogOpen(false);
+			setOperationStatus(message);
+
+			setEditingRemoteName("");
+			setEditingRemoteUrl("");
+		} catch (err) {
+			setEditRemoteError(String(err));
+		} finally {
+			setEditRemoteLoading(false);
+		}
+	}
 
 	async function handleAddRemote() {
 		if (!repoPath || addRemoteLoading) return;
@@ -1332,6 +1418,53 @@ function App() {
 														<span title={url}>
 															{url}
 														</span>
+														<button
+															type="button"
+															onClick={() => {
+																setEditingRemoteName(
+																	name,
+																);
+																setEditingRemoteUrl(
+																	url,
+																);
+																setEditRemoteDialogOpen(
+																	true,
+																);
+															}}
+															disabled={
+																repoLoading ||
+																Boolean(
+																	fetchingRemote,
+																) ||
+																pushingBranch ||
+																pullingBranch ||
+																branchBusy
+															}
+															title={`Edit the URL for remote '${name}'`}
+														>
+															Edit
+														</button>
+														<button
+															type="button"
+															className="button-danger"
+															onClick={() =>
+																removeRemote(
+																	name,
+																)
+															}
+															disabled={
+																repoLoading ||
+																Boolean(
+																	fetchingRemote,
+																) ||
+																pushingBranch ||
+																pullingBranch ||
+																branchBusy
+															}
+															title={`Remove remote '${name}' from this local repository`}
+														>
+															Remove
+														</button>
 														<button
 															type="button"
 															onClick={() =>
@@ -2247,6 +2380,71 @@ function App() {
 								}
 							>
 								{addRemoteLoading ? "Adding..." : "Add Remote"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
+
+			{editRemoteDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="edit-remote-dialog-title"
+					>
+						<h2 id="edit-remote-dialog-title">Edit Remote</h2>
+
+						<label htmlFor="editing-remote-name">Remote Name</label>
+						<input
+							id="editing-remote-name"
+							type="text"
+							value={editingRemoteName}
+							readOnly
+						/>
+
+						<label htmlFor="editing-remote-url">
+							Repository URL
+						</label>
+						<input
+							id="editing-remote-url"
+							type="text"
+							disabled={editRemoteLoading}
+							placeholder="git@github.com:user/repository.git"
+							value={editingRemoteUrl}
+							onChange={(event) =>
+								setEditingRemoteUrl(event.target.value)
+							}
+						/>
+
+						{editRemoteError && (
+							<p className="clone-error" role="alert">
+								{editRemoteError}
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setEditRemoteDialogOpen(false)}
+								disabled={editRemoteLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handleUpdateRemoteUrl}
+								disabled={
+									editRemoteLoading ||
+									!editingRemoteUrl.trim()
+								}
+							>
+								{editRemoteLoading
+									? "Saving..."
+									: "Save Changes"}
 							</button>
 						</div>
 					</section>
