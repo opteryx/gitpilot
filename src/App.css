@@ -1164,7 +1164,8 @@ button:not(
 	font-weight: 600;
 }
 
-.clone-dialog input {
+.clone-dialog input,
+.clone-dialog select {
 	width: 100%;
 	min-width: 0;
 	padding: 9px;

@@ -59,8 +59,52 @@ fn get_upstream_status(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn set_upstream(repo_path: String, remote_branch: String) -> Result<String, String> {
+    let target = remote_branch.trim();
+
+    if target.is_empty() || target.starts_with('-') {
+        return Err("Select a valid remote branch.".to_string());
+    }
+
+    let current_branch = run_git(&repo_path, &["branch", "--show-current"])?;
+
+    if current_branch.is_empty() {
+        return Err("Cannot set upstream: HEAD is detached.".to_string());
+    }
+
+    // Confirm the requested remote-tracking branch exists locally.
+    let reference = format!("refs/remotes/{target}");
+
+    run_git(&repo_path, &["show-ref", "--verify", &reference])
+        .map_err(|_| format!("Remote branch '{target}' was not found. Fetch first."))?;
+
+    // Configure tracking without pushing or pulling.
+    run_git(
+        &repo_path,
+        &[
+            "branch",
+            &format!("--set-upstream-to={target}"),
+            &current_branch,
+        ],
+    )?;
+
+    Ok(format!("Branch '{current_branch}' now tracks '{target}'."))
+}
+
+#[tauri::command]
 fn get_remotes(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["remote", "-v"])
+}
+
+#[tauri::command]
+fn get_remote_branches(repo_path: String) -> Result<Vec<String>, String> {
+    let output = run_git(&repo_path, &["branch", "-r", "--format=%(refname:short)"])?;
+
+    Ok(output
+        .lines()
+        .filter(|line| !line.ends_with("/HEAD"))
+        .map(str::to_string)
+        .collect())
 }
 
 #[tauri::command]
@@ -282,6 +326,145 @@ async fn push_current_branch(repo_path: String) -> Result<String, String> {
         Ok(format!(
             "Successfully pushed branch '{}' to '{}'.",
             branch, upstream
+        ))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn publish_branch(repo_path: String, remote_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let remote = remote_name.trim();
+
+        if remote.is_empty() || remote.starts_with('-') {
+            return Err("Select a valid remote.".to_string());
+        }
+
+        let remotes = run_git(&repo_path, &["remote"])?;
+
+        if !remotes.lines().any(|name| name == remote) {
+            return Err(format!("Remote '{remote}' is not configured."));
+        }
+
+        let branch = run_git(&repo_path, &["branch", "--show-current"])?;
+
+        if branch.is_empty() {
+            return Err("Cannot publish: HEAD is detached.".to_string());
+        }
+
+        // Publishing is intended for branches without an upstream.
+        if run_git(&repo_path, &["rev-parse", "--verify", "@{upstream}"]).is_ok() {
+            return Err("This branch already has an upstream. Use Push instead.".to_string());
+        }
+
+        // Require at least one commit.
+        run_git(&repo_path, &["rev-parse", "--verify", "HEAD"])
+            .map_err(|_| "Create a commit before publishing.".to_string())?;
+
+        // Publish only a new remote branch.
+        // The lease below rejects an existing destination branch.
+        let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
+
+        // Create the remote branch only if it does not already exist.
+        // An empty expected value means the destination must be absent.
+        let create_only_lease = format!("--force-with-lease=refs/heads/{branch}:");
+
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .args(["-c", "credential.helper="])
+            .args(["-c", "core.askPass="])
+            .args(["-c", "http.lowSpeedLimit=1000"])
+            .args(["-c", "http.lowSpeedTime=20"])
+            .args([
+                "push",
+                "--porcelain",
+                &create_only_lease,
+                "--set-upstream",
+                "--",
+                remote,
+                &refspec,
+            ])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
+            .env("GIT_ASKPASS", "false")
+            .env("SSH_ASKPASS", "false")
+            .env(
+                "GIT_SSH_COMMAND",
+                "ssh -o BatchMode=yes -o ConnectTimeout=10",
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Unable to start Git push: {error}"))?;
+
+        let mut stdout = child.stdout.take().ok_or("Missing push stdout")?;
+        let mut stderr = child.stderr.take().ok_or("Missing push stderr")?;
+
+        let stdout_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        let stderr_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+
+        let started = Instant::now();
+        let timeout = Duration::from_secs(45);
+
+        let (status, timed_out) = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break (status, false),
+
+                Ok(None) if started.elapsed() >= timeout => {
+                    let _ = child.kill();
+                    let status = child.wait().map_err(|error| error.to_string())?;
+                    break (status, true);
+                }
+
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Unable to monitor Git push: {error}"));
+                }
+            }
+        };
+
+        let stdout = stdout_reader
+            .join()
+            .map_err(|_| "Unable to read Git push output".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stderr = stderr_reader
+            .join()
+            .map_err(|_| "Unable to read Git push errors".to_string())?
+            .map_err(|error| error.to_string())?;
+
+        let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+
+        if timed_out {
+            return Err(
+                "Publish timed out after 45 seconds. Check the remote before retrying.".to_string(),
+            );
+        }
+
+        if !status.success() {
+            return Err(if stderr.is_empty() {
+                format!("Publish failed: {stdout}")
+            } else {
+                format!("Publish failed: {stderr}")
+            });
+        }
+
+        Ok(format!(
+            "Published '{branch}' to '{remote}/{branch}' and configured upstream tracking."
         ))
     })
     .await
@@ -1004,12 +1187,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_upstream_status,
+            set_upstream,
             get_remotes,
+            get_remote_branches,
             add_remote,
             update_remote_url,
             remove_remote,
             fetch_remote,
             push_current_branch,
+            publish_branch,
             pull_current_branch,
             clone_repository,
             get_current_branch,

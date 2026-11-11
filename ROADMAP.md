@@ -38,7 +38,7 @@ Implement these incrementally, with a working test after each feature.
 - [X] **Clone Repository** — Accept a remote repository URL, let the user choose a local destination, and open the resulting repository in GitPilot. Support SSH first, using the existing noninteractive Git approach.
 - [X] **Add Remote** — Connect an existing local repository to an existing GitHub (or other Git-hosted) repository without using a terminal.
 - [X] **Manage Remotes** — View, edit, and remove configured remote URLs, distinguishing fetch and push URLs when necessary.
-- [ ] **Set Upstream** — Choose the remote branch tracked by a local branch; make it possible to publish a branch that has no upstream yet.
+- [X] **Set Upstream** — Choose the remote branch tracked by a local branch; make it possible to publish a branch that has no upstream yet.
 - [ ] **Create GitHub Repository** — Create a public or private repository in the user's GitHub account. Requires an authentication strategy; do not assume the existing Git SSH key provides GitHub API authorization.
 - [ ] **Publish Repository** — Guide the user through creating or selecting a remote, attaching it to a local project, setting upstream tracking, and pushing the initial branch.
 

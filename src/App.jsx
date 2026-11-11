@@ -63,7 +63,15 @@ function App() {
 	const [branch, setBranch] = useState("");
 	const [branches, setBranches] = useState([]);
 	const [remotes, setRemotes] = useState("");
+	const [remoteBranches, setRemoteBranches] = useState([]);
 	const [upstreamStatus, setUpstreamStatus] = useState("");
+	const [upstreamDialogOpen, setUpstreamDialogOpen] = useState(false);
+	const [selectedUpstream, setSelectedUpstream] = useState("");
+	const [upstreamLoading, setUpstreamLoading] = useState(false);
+	const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+	const [publishRemote, setPublishRemote] = useState("origin");
+	const [publishLoading, setPublishLoading] = useState(false);
+	const [publishError, setPublishError] = useState("");
 	const [fetchingRemote, setFetchingRemote] = useState("");
 	const [pushingBranch, setPushingBranch] = useState(false);
 	const [pullingBranch, setPullingBranch] = useState(false);
@@ -194,6 +202,102 @@ function App() {
 		});
 
 		setUpstreamStatus(status);
+	}
+
+	async function handleSetUpstream() {
+		if (
+			!repoPath ||
+			!branch ||
+			!selectedUpstream ||
+			upstreamLoading ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress
+		) {
+			return;
+		}
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+
+		setUpstreamLoading(true);
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const message = await invoke("set_upstream", {
+				repoPath: path,
+				remoteBranch: selectedUpstream,
+			});
+
+			if (requestId !== repoRequestId.current) return;
+
+			await refreshUpstreamStatus(path);
+
+			setOperationStatus(message);
+			setUpstreamDialogOpen(false);
+			setSelectedUpstream("");
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				setError(String(err));
+			}
+		} finally {
+			setUpstreamLoading(false);
+		}
+	}
+
+	async function handlePublishBranch() {
+		if (
+			!repoPath ||
+			!branch ||
+			!publishRemote ||
+			upstreamStatus ||
+			publishLoading ||
+			repoLoading ||
+			branchBusy ||
+			mergeInProgress ||
+			Boolean(fetchingRemote) ||
+			pushingBranch ||
+			pullingBranch
+		) {
+			return;
+		}
+
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+
+		setPublishLoading(true);
+		setPublishError("");
+
+		try {
+			const message = await invoke("publish_branch", {
+				repoPath: path,
+				remoteName: publishRemote,
+			});
+
+			if (requestId !== repoRequestId.current) return;
+
+			const [trackingStatus, availableRemoteBranches] = await Promise.all(
+				[
+					invoke("get_upstream_status", { repoPath: path }),
+					invoke("get_remote_branches", { repoPath: path }),
+				],
+			);
+
+			if (requestId !== repoRequestId.current) return;
+
+			setUpstreamStatus(trackingStatus);
+			setRemoteBranches(availableRemoteBranches);
+			setOperationStatus(message);
+			setPublishDialogOpen(false);
+			setPublishError("");
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				setPublishError(String(err));
+			}
+		} finally {
+			setPublishLoading(false);
+		}
 	}
 
 	async function fetchRemote(remoteName) {
@@ -524,12 +628,14 @@ function App() {
 				currentBranch,
 				localBranches,
 				remoteList,
+				availableRemoteBranches,
 				trackingStatus,
 				history,
 			] = await Promise.all([
 				invoke("get_current_branch", { repoPath: path }),
 				invoke("get_local_branches", { repoPath: path }),
 				invoke("get_remotes", { repoPath: path }),
+				invoke("get_remote_branches", { repoPath: path }),
 				invoke("get_upstream_status", { repoPath: path }),
 				invoke("get_commit_history", { repoPath: path }),
 			]);
@@ -539,6 +645,7 @@ function App() {
 			setBranch(currentBranch);
 			setBranches(localBranches);
 			setRemotes(remoteList);
+			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
 			setCommits(parseCommitHistory(history));
 
@@ -592,14 +699,17 @@ function App() {
 			});
 
 			// Reload remotes and upstream information.
-			const [remoteList, trackingStatus] = await Promise.all([
-				invoke("get_remotes", { repoPath: path }),
-				invoke("get_upstream_status", { repoPath: path }),
-			]);
+			const [remoteList, availableRemoteBranches, trackingStatus] =
+				await Promise.all([
+					invoke("get_remotes", { repoPath: path }),
+					invoke("get_remote_branches", { repoPath: path }),
+					invoke("get_upstream_status", { repoPath: path }),
+				]);
 
 			if (requestId !== repoRequestId.current) return;
 
 			setRemotes(remoteList);
+			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
 			setOperationStatus(message);
 		} catch (err) {
@@ -747,6 +857,7 @@ function App() {
 			setBranch("");
 			setBranches([]);
 			setRemotes("");
+			setRemoteBranches([]);
 			setUpstreamStatus("");
 			setRepoPath("");
 			setCommits([]);
@@ -764,6 +875,13 @@ function App() {
 				repoPath: rootPath,
 			});
 
+			const availableRemoteBranches = await invoke(
+				"get_remote_branches",
+				{
+					repoPath: rootPath,
+				},
+			);
+
 			const trackingStatus = await invoke("get_upstream_status", {
 				repoPath: rootPath,
 			});
@@ -777,6 +895,7 @@ function App() {
 			setBranch(currentBranch);
 			setBranches(localBranches);
 			setRemotes(remoteList);
+			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
 			setRepoPath(rootPath);
 			setNewBranchName("");
@@ -1577,6 +1696,69 @@ function App() {
 									</div>
 								);
 							})()}
+
+						{branch && remotes && (
+							<button
+								type="button"
+								onClick={() => {
+									setSelectedUpstream(
+										upstreamStatus
+											? upstreamStatus.split("|")[0]
+											: "",
+									);
+									setUpstreamDialogOpen(true);
+								}}
+								disabled={
+									repoLoading ||
+									branchBusy ||
+									upstreamLoading ||
+									Boolean(fetchingRemote) ||
+									pushingBranch ||
+									pullingBranch ||
+									mergeInProgress
+								}
+								title="Choose which remote branch the current local branch tracks"
+							>
+								Set Upstream
+							</button>
+						)}
+
+						{branch && remotes && !upstreamStatus && (
+							<button
+								type="button"
+								onClick={() => {
+									const remoteNames = remotes
+										.split("\n")
+										.filter((line) =>
+											line.includes("(fetch)"),
+										)
+										.map(
+											(line) =>
+												line.trim().split(/\s+/)[0],
+										);
+
+									setPublishRemote(
+										remoteNames.includes("origin")
+											? "origin"
+											: remoteNames[0] || "",
+									);
+									setPublishError("");
+									setPublishDialogOpen(true);
+								}}
+								disabled={
+									repoLoading ||
+									branchBusy ||
+									publishLoading ||
+									Boolean(fetchingRemote) ||
+									pushingBranch ||
+									pullingBranch ||
+									mergeInProgress
+								}
+								title="Publish this local branch to a remote repository and configure upstream tracking"
+							>
+								Publish Branch
+							</button>
+						)}
 
 						{branches.length > 0 && (
 							<div className="branch-list">
@@ -2445,6 +2627,161 @@ function App() {
 								{editRemoteLoading
 									? "Saving..."
 									: "Save Changes"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
+
+			{upstreamDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="upstream-dialog-title"
+					>
+						<h2 id="upstream-dialog-title">Set Upstream</h2>
+
+						<p>
+							Choose the remote branch that local branch{" "}
+							<strong>{branch}</strong> should track.
+						</p>
+
+						<label htmlFor="upstream-branch">Remote Branch</label>
+
+						<select
+							id="upstream-branch"
+							value={selectedUpstream}
+							onChange={(event) =>
+								setSelectedUpstream(event.target.value)
+							}
+							disabled={upstreamLoading}
+						>
+							<option value="">Select a remote branch...</option>
+
+							{remoteBranches.map((remoteBranch) => (
+								<option key={remoteBranch} value={remoteBranch}>
+									{remoteBranch}
+								</option>
+							))}
+						</select>
+
+						{remoteBranches.length === 0 && (
+							<p className="placeholder">
+								No remote branches are available. Fetch from the
+								remote repository first.
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setUpstreamDialogOpen(false)}
+								disabled={upstreamLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handleSetUpstream}
+								disabled={
+									upstreamLoading ||
+									!selectedUpstream ||
+									selectedUpstream ===
+										(upstreamStatus
+											? upstreamStatus.split("|")[0]
+											: "")
+								}
+							>
+								{upstreamLoading ? "Saving..." : "Set Upstream"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
+
+			{publishDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="publish-dialog-title"
+					>
+						<h2 id="publish-dialog-title">Publish Branch</h2>
+
+						<p>
+							Publish the current local branch to a remote
+							repository and configure upstream tracking.
+						</p>
+
+						<label>Local Branch</label>
+						<strong>{branch}</strong>
+
+						<label htmlFor="publish-remote">
+							Remote Repository
+						</label>
+
+						<select
+							id="publish-remote"
+							value={publishRemote}
+							onChange={(event) =>
+								setPublishRemote(event.target.value)
+							}
+							disabled={publishLoading}
+						>
+							{remotes
+								.split("\n")
+								.filter((line) => line.includes("(fetch)"))
+								.map((line) => line.trim().split(/\s+/)[0])
+								.map((name) => (
+									<option key={name} value={name}>
+										{name}
+									</option>
+								))}
+						</select>
+
+						<label>Destination Branch</label>
+						<strong>
+							{publishRemote}/{branch}
+						</strong>
+
+						<p className="placeholder">
+							This will create the remote branch and set it as the
+							upstream for your local branch. Publishing will be
+							rejected if the remote branch already exists.
+						</p>
+
+						{publishError && (
+							<p className="clone-error" role="alert">
+								{publishError}
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setPublishDialogOpen(false)}
+								disabled={publishLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handlePublishBranch}
+								disabled={
+									publishLoading ||
+									!publishRemote ||
+									!branch ||
+									Boolean(upstreamStatus)
+								}
+							>
+								{publishLoading ? "Publishing..." : "Publish"}
 							</button>
 						</div>
 					</section>
