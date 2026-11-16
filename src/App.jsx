@@ -97,6 +97,12 @@ function App() {
 	const [cloneFolderName, setCloneFolderName] = useState("");
 	const [cloneLoading, setCloneLoading] = useState(false);
 	const [cloneError, setCloneError] = useState("");
+	const [githubDialogOpen, setGithubDialogOpen] = useState(false);
+	const [githubRepoName, setGithubRepoName] = useState("");
+	const [githubDescription, setGithubDescription] = useState("");
+	const [githubPrivate, setGithubPrivate] = useState(true);
+	const [githubLoading, setGithubLoading] = useState(false);
+	const [githubError, setGithubError] = useState("");
 	const [commits, setCommits] = useState([]);
 	const [selectedCommit, setSelectedCommit] = useState(null);
 	const [selectedCommitMessage, setSelectedCommitMessage] = useState("");
@@ -785,6 +791,36 @@ function App() {
 		}
 	}
 
+	async function handleCreateGithubRepository() {
+		if (!githubRepoName.trim() || githubLoading) return;
+
+		setGithubLoading(true);
+		setGithubError("");
+		setError("");
+		setOperationStatus("");
+
+		try {
+			const repositoryUrl = await invoke("create_github_repository", {
+				repositoryName: githubRepoName.trim(),
+				description: githubDescription.trim(),
+				isPrivate: githubPrivate,
+			});
+
+			setGithubDialogOpen(false);
+			setOperationStatus(
+				`GitHub repository created successfully: ${repositoryUrl}`,
+			);
+
+			setGithubRepoName("");
+			setGithubDescription("");
+			setGithubPrivate(true);
+		} catch (err) {
+			setGithubError(String(err));
+		} finally {
+			setGithubLoading(false);
+		}
+	}
+
 	async function handleCloneRepository() {
 		if (cloneLoading) return;
 
@@ -1456,6 +1492,25 @@ function App() {
 							title="Copy an existing remote Git repository to your computer"
 						>
 							Clone Repository
+						</button>
+
+						<button
+							type="button"
+							onClick={() => {
+								setGithubError("");
+								setGithubDialogOpen(true);
+							}}
+							disabled={
+								repoLoading ||
+								githubLoading ||
+								Boolean(fetchingRemote) ||
+								pushingBranch ||
+								pullingBranch ||
+								branchBusy
+							}
+							title="Create a new public or private repository in your GitHub account"
+						>
+							Create GitHub Repository
 						</button>
 
 						<button
@@ -2496,6 +2551,99 @@ function App() {
 								}
 							>
 								{cloneLoading ? "Cloning..." : "Clone"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
+
+			{githubDialogOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="github-dialog-title"
+					>
+						<h2 id="github-dialog-title">
+							Create GitHub Repository
+						</h2>
+
+						<label htmlFor="github-repo-name">
+							Repository Name
+						</label>
+						<input
+							id="github-repo-name"
+							type="text"
+							placeholder="my-new-repository"
+							value={githubRepoName}
+							onChange={(event) =>
+								setGithubRepoName(event.target.value)
+							}
+							disabled={githubLoading}
+						/>
+
+						<label htmlFor="github-description">
+							Description (optional)
+						</label>
+						<input
+							id="github-description"
+							type="text"
+							placeholder="Brief description of the project"
+							value={githubDescription}
+							onChange={(event) =>
+								setGithubDescription(event.target.value)
+							}
+							disabled={githubLoading}
+						/>
+
+						<label htmlFor="github-visibility">Visibility</label>
+						<select
+							id="github-visibility"
+							value={githubPrivate ? "private" : "public"}
+							onChange={(event) =>
+								setGithubPrivate(
+									event.target.value === "private",
+								)
+							}
+							disabled={githubLoading}
+						>
+							<option value="private">Private</option>
+							<option value="public">Public</option>
+						</select>
+
+						<p className="placeholder">
+							Creates an empty repository in your authenticated
+							GitHub account. No local files will be uploaded, and
+							no remote will be added automatically.
+						</p>
+
+						{githubError && (
+							<p className="clone-error" role="alert">
+								{githubError}
+							</p>
+						)}
+
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setGithubDialogOpen(false)}
+								disabled={githubLoading}
+							>
+								Cancel
+							</button>
+
+							<button
+								type="button"
+								className="button-primary"
+								onClick={handleCreateGithubRepository}
+								disabled={
+									githubLoading || !githubRepoName.trim()
+								}
+							>
+								{githubLoading
+									? "Creating..."
+									: "Create Repository"}
 							</button>
 						</div>
 					</section>

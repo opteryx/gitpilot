@@ -807,6 +807,58 @@ async fn clone_repository(
     .map_err(|error| error.to_string())?
 }
 
+// Create a new repository in the authenticated GitHub account.
+// This does not clone, attach a remote, or push local files.
+#[tauri::command]
+async fn create_github_repository(
+    repository_name: String,
+    description: String,
+    is_private: bool,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let name = repository_name.trim();
+
+        if name.is_empty()
+            || name.starts_with('-')
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        {
+            return Err("Enter a valid GitHub repository name.".to_string());
+        }
+
+        let visibility = if is_private { "--private" } else { "--public" };
+
+        let output = Command::new("gh")
+            .args([
+                "repo",
+                "create",
+                name,
+                visibility,
+                "--description",
+                description.trim(),
+            ])
+            .env("GH_PROMPT_DISABLED", "1")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| {
+                format!("Unable to start GitHub CLI. Make sure 'gh' is installed: {error}")
+            })?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "GitHub repository creation failed: {}",
+                error.trim()
+            ));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 fn get_current_branch(repo_path: String) -> Result<String, String> {
     run_git(&repo_path, &["branch", "--show-current"])
@@ -1186,6 +1238,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            create_github_repository,
             get_upstream_status,
             set_upstream,
             get_remotes,
