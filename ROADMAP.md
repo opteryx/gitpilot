@@ -40,7 +40,7 @@ Implement these incrementally, with a working test after each feature.
 - [X] **Manage Remotes** — View, edit, and remove configured remote URLs, distinguishing fetch and push URLs when necessary.
 - [X] **Set Upstream** — Choose the remote branch tracked by a local branch; make it possible to publish a branch that has no upstream yet.
 - [X] **Create GitHub Repository** — Create a public or private repository in the user's GitHub account. Requires an authentication strategy; do not assume the existing Git SSH key provides GitHub API authorization.
-- [ ] **Publish Repository** — Guide the user through creating or selecting a remote, attaching it to a local project, setting upstream tracking, and pushing the initial branch.
+- [X] **Publish Repository** — Guide the user through creating or selecting a remote, attaching it to a local project, setting upstream tracking, and pushing the initial branch.
 
 ### Phase 2 design principles
 
@@ -51,9 +51,9 @@ Implement these incrementally, with a working test after each feature.
 
 ## Phase 3 — Clarity and everyday usability (Planned)
 
-- [ ] **Contextual tooltips** — Describe controls and Git terminology without requiring a tutorial.
-- [ ] **Merge direction help** — State clearly that the selected branch is merged **into the currently checked-out branch**.
-- [ ] **Tracking help** — Explain upstream, Ahead, Behind, and what Fetch changes.
+- [X] **Contextual tooltips** — Describe controls and Git terminology without requiring a tutorial.
+- [X] **Merge direction help** — State clearly that the selected branch is merged **into the currently checked-out branch**.
+- [X] **Tracking help** — Explain upstream, Ahead, Behind, and what Fetch changes.
 - [ ] **File status help** — Explain indicators such as `M`, `A`, `D`, `R`, `??`, and conflicted states.
 - [ ] **Contextual help popups** — Offer optional, short explanations for unfamiliar operations.
 - [ ] **More precise Pull feedback** — Distinguish *Already up to date*, *Fast-forwarded to new commits*, and *Unable to fast-forward*.

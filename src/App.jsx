@@ -1468,6 +1468,10 @@ function App() {
 						<button
 							type="button"
 							onClick={loadRepository}
+							title={
+								"Open an existing local Git repository without modifying its files.\n" +
+								"Git: git rev-parse --show-toplevel"
+							}
 							className="button-primary"
 							disabled={
 								repoLoading ||
@@ -1489,7 +1493,10 @@ function App() {
 								pullingBranch ||
 								branchBusy
 							}
-							title="Copy an existing remote Git repository to your computer"
+							title={
+								"Download an existing remote repository into a new local folder.\n" +
+								"Git: git clone <repository-url>"
+							}
 						>
 							Clone Repository
 						</button>
@@ -1508,7 +1515,10 @@ function App() {
 								pullingBranch ||
 								branchBusy
 							}
-							title="Create a new public or private repository in your GitHub account"
+							title={
+								"Create a new public or private repository in your GitHub account without uploading local files.\n" +
+								"GitHub CLI: gh repo create <name> --private"
+							}
 						>
 							Create GitHub Repository
 						</button>
@@ -1524,7 +1534,10 @@ function App() {
 								branchBusy ||
 								mergeInProgress
 							}
-							title="Refresh repository information without contacting the remote server"
+							title={
+								"Reload local repository status, branches, commits, and tracking information without contacting GitHub.\n" +
+								"Git: git status, git branch, git log (and other read-only commands)"
+							}
 						>
 							{repoLoading ? "Refreshing..." : "Refresh"}
 						</button>
@@ -1567,7 +1580,10 @@ function App() {
 										pullingBranch ||
 										branchBusy
 									}
-									title="Connect this local repository to a remote Git repository"
+									title={
+										"Connect this local repository to an existing remote repository without uploading files.\n" +
+										"Git: git remote add origin <repository-url>"
+									}
 								>
 									Add Remote
 								</button>
@@ -1614,7 +1630,10 @@ function App() {
 																pullingBranch ||
 																branchBusy
 															}
-															title={`Edit the URL for remote '${name}'`}
+															title={
+																`Change the URL for remote "${name}" without fetching or pushing.\n` +
+																`Git: git remote set-url ${name} <new-url>`
+															}
 														>
 															Edit
 														</button>
@@ -1635,7 +1654,10 @@ function App() {
 																pullingBranch ||
 																branchBusy
 															}
-															title={`Remove remote '${name}' from this local repository`}
+															title={
+																`Remove the local connection to remote "${name}" without deleting the repository on GitHub.\n` +
+																`Git: git remote remove ${name}`
+															}
 														>
 															Remove
 														</button>
@@ -1645,6 +1667,10 @@ function App() {
 																fetchRemote(
 																	name,
 																)
+															}
+															title={
+																"Download remote commits and update remote-tracking branches without merging.\n" +
+																`Git: git fetch ${name}`
 															}
 															disabled={
 																Boolean(
@@ -1680,7 +1706,10 @@ function App() {
 																branchBusy ||
 																mergeInProgress
 															}
-															title="Push the current branch to its configured upstream branch"
+															title={
+																"Upload new local commits to the configured remote branch.\n" +
+																"Git: git push"
+															}
 														>
 															{pushingBranch
 																? "Pushing..."
@@ -1704,7 +1733,10 @@ function App() {
 																branchBusy ||
 																mergeInProgress
 															}
-															title="Download and fast-forward the current branch from its upstream"
+															title={
+																"Fetch remote changes and update the current branch only if a fast-forward is possible.\n" +
+																"Git: git fetch <remote> && git merge --ff-only @{upstream}"
+															}
 														>
 															{pullingBranch
 																? "Pulling..."
@@ -1772,7 +1804,10 @@ function App() {
 									pullingBranch ||
 									mergeInProgress
 								}
-								title="Choose which remote branch the current local branch tracks"
+								title={
+									"Choose which remote branch the current local branch tracks.\n" +
+									"Git: git branch --set-upstream-to=origin/main"
+								}
 							>
 								Set Upstream
 							</button>
@@ -1809,7 +1844,10 @@ function App() {
 									pullingBranch ||
 									mergeInProgress
 								}
-								title="Publish this local branch to a remote repository and configure upstream tracking"
+								title={
+									"Upload this branch for the first time and configure upstream tracking.\n" +
+									`Git: git push -u ${publishRemote || "origin"} ${branch}`
+								}
 							>
 								Publish Branch
 							</button>
@@ -1833,6 +1871,10 @@ function App() {
 											}`}
 											onClick={() =>
 												switchBranch(branchName)
+											}
+											title={
+												`Switch to local branch "${branchName}".\n` +
+												`Git: git switch "${branchName}"`
 											}
 											disabled={
 												repoLoading ||
@@ -1863,7 +1905,10 @@ function App() {
 														branchBusy ||
 														mergeInProgress
 													}
-													title={`Merge ${branchName} into ${branch}`}
+													title={
+														`Merge branch "${branchName}" INTO the current branch "${branch}".\n` +
+														`Git: git merge "${branchName}"`
+													}
 												>
 													Merge
 												</button>
@@ -1879,7 +1924,10 @@ function App() {
 														branchBusy ||
 														mergeInProgress
 													}
-													title={`Delete branch ${branchName}`}
+													title={
+														`Delete local branch "${branchName}" if its changes have been merged.\n` +
+														`Git: git branch -d "${branchName}"`
+													}
 												>
 													Delete
 												</button>
@@ -1926,6 +1974,13 @@ function App() {
 									<button
 										type="button"
 										onClick={createBranch}
+										title={
+											"Create a new local branch without uploading it to GitHub.\n" +
+											`Git: git branch "${newBranchName}"` +
+											(switchAfterCreate
+												? ` && git switch "${newBranchName}"`
+												: "")
+										}
 										disabled={
 											!newBranchName.trim() ||
 											branchCreating ||
@@ -2041,6 +2096,10 @@ function App() {
 									<button
 										type="button"
 										onClick={stageAllFiles}
+										title={
+											"Stage all new, modified, and deleted files for the next commit.\n" +
+											"Git: git add -A"
+										}
 										disabled={
 											!repoPath ||
 											changesLoading ||
@@ -2059,6 +2118,10 @@ function App() {
 									<button
 										type="button"
 										onClick={unstageAllFiles}
+										title={
+											"Remove all files from the staging area without discarding their changes.\n" +
+											"Git: git restore --staged -- ."
+										}
 										disabled={
 											!repoPath ||
 											changesLoading ||
@@ -2157,7 +2220,10 @@ function App() {
 																file,
 															)
 														}
-														title={`Stage ${file.path}`}
+														title={
+															`Stage changes to ${file.path} for the next commit.\n` +
+															`Git: git add -- "${file.path}"`
+														}
 													>
 														Stage
 													</button>
@@ -2177,7 +2243,10 @@ function App() {
 																	file,
 																)
 															}
-															title={`Unstage ${file.path}`}
+															title={
+																`Remove ${file.path} from staging without discarding edits.\n` +
+																`Git: git restore --staged -- "${file.path}"`
+															}
 														>
 															Unstage
 														</button>
@@ -2209,6 +2278,10 @@ function App() {
 							<button
 								type="button"
 								onClick={createCommit}
+								title={
+									"Save staged changes as a new local commit.\n" +
+									'Git: git commit -m "Commit summary"'
+								}
 								className="button-primary"
 								disabled={
 									!repoPath ||
