@@ -76,12 +76,8 @@ button {
 }
 
 .history-panel {
-	display: flex;
-	flex-direction: column;
 	min-width: 0;
-	min-height: 0;
-	padding: 20px;
-	overflow: hidden;
+	margin-top: 24px;
 }
 
 .details-panel {
@@ -109,6 +105,22 @@ button {
 .sidebar h3 {
 	margin-top: 32px;
 	font-size: 14px;
+}
+
+/* Subtle separators between the main repository sidebar sections.
+   Keep the existing layout and both scroll areas unchanged. */
+.sidebar .remote-list > h3,
+.sidebar > h3,
+.sidebar .branch-list > h3,
+.sidebar .history-panel > h2 {
+	border-top: 1px solid #bbc7d4;
+	padding-top: 13px;
+}
+
+/* Reduce empty space without crowding the controls. */
+.sidebar .remote-list > h3,
+.sidebar > h3 {
+	margin-top: 20px;
 }
 
 /* Merge status warning */
@@ -287,64 +299,71 @@ button {
 	font-size: 13px;
 }
 
-.error-message {
-	margin-top: 16px;
-	padding: 12px;
-	background: #fff1f0;
-	border: 1px solid #f3b7b2;
-	border-radius: 6px;
-	color: #a42620;
+/* Persistent status bar: outside the scrolling workspace */
+.app-status-bar {
+	flex: 0 0 auto;
+	min-width: 0;
+	padding: 8px 16px;
+	border-top: 1px solid #cdd5de;
+	background: #e9edf2;
+	color: #354354;
 	font-size: 12px;
+}
+
+.app-status-content {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.app-status-content strong {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.app-status-message {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-height: 90px;
+	overflow-y: auto;
 	overflow-wrap: anywhere;
-}
-
-.operation-status {
-	margin-top: 16px;
-	padding: 12px;
-	background-color: #e8f3ea;
-	border: 1px solid #a3c9aa;
-	border-radius: 6px;
-	color: #245c32;
-	font-size: 13px;
-}
-
-.operation-status strong {
-	display: block;
-	margin-bottom: 6px;
-}
-
-.operation-status p {
-	margin: 0 0 10px;
-	line-height: 1.5;
-}
-
-.operation-status button {
-	padding: 4px 10px;
-	font-size: 12px;
-}
-
-.error-message strong {
-	display: block;
-	margin-bottom: 6px;
-}
-
-.error-message p {
-	margin: 0 0 10px;
 	white-space: pre-wrap;
+	line-height: 1.4;
 }
 
-.sidebar .dismiss-error {
-	width: auto;
-	padding: 5px 10px;
-	font-size: 11px;
-	cursor: pointer;
+.app-status-content button {
+	flex: 0 0 auto;
+	margin-left: auto;
+	padding: 4px 10px;
+}
+
+.app-status-success {
+	background: #e8f3ea;
+	border-top-color: #a3c9aa;
+	color: #245c32;
+}
+
+.app-status-error {
+	background: #fff1f0;
+	border-top-color: #f3b7b2;
+	color: #a42620;
+}
+
+@media (max-width: 700px) {
+	.app-status-bar {
+		padding: 8px 10px;
+	}
+	.app-status-content {
+		gap: 6px;
+	}
 }
 
 /* Commit history */
 
 .commit-list {
-	flex: 1;
-	min-height: 0;
+	/* Show several recent commits; scroll inside the list for older history. */
+	max-height: 360px;
 	overflow-y: auto;
 	background: white;
 	border: 1px solid #d5dbe3;
@@ -597,15 +616,9 @@ button {
 	}
 
 	.left-column > .sidebar {
-		flex: 0 1 auto;
+		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-	}
-
-	.left-column > .history-panel {
-		flex: 1 1 0;
-		min-height: 180px;
-		overflow: hidden;
 	}
 
 	.right-column {
@@ -653,26 +666,14 @@ button {
 	}
 
 	.left-column > .sidebar {
-		flex: 0 1 auto;
+		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-	}
-
-	.left-column > .history-panel {
-		flex: 1 1 0;
-		min-height: 180px;
-		overflow: hidden;
 	}
 
 	.sidebar {
 		min-height: 0;
 		padding: 14px;
-	}
-
-	.history-panel {
-		padding: 14px;
-		background: #e9edf2;
-		border-right: 1px solid #cdd5de;
 	}
 
 	.details-panel {
@@ -854,7 +855,6 @@ button {
 
 	.sidebar,
 	.content,
-	.history-panel,
 	.details-panel {
 		flex: none;
 		width: 100%;
@@ -878,18 +878,6 @@ button {
 
 	.details-panel {
 		border-left: none;
-	}
-
-	.history-panel {
-		min-height: 250px;
-		background: #e9edf2;
-		border-right: none;
-	}
-
-	.commit-list {
-		flex: none;
-		max-height: 300px;
-		overflow-y: auto;
 	}
 
 	.file-diff-panel {

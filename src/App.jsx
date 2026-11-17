@@ -1996,85 +1996,61 @@ function App() {
 								</div>
 							</div>
 						)}
+						{/* COMMIT HISTORY — Following branch management in the scrolling sidebar */}
+						<section className="history-panel">
+							<h2>Commit History</h2>
 
-						{operationStatus && (
-							<div className="operation-status" role="status">
-								<strong>Operation Status</strong>
-								<p>{operationStatus}</p>
-								<button
-									type="button"
-									onClick={() => setOperationStatus("")}
-								>
-									Dismiss
-								</button>
-							</div>
-						)}
+							{commits.length === 0 ? (
+								<div className="empty-state">
+									<p>
+										{repoLoading
+											? "Loading repository..."
+											: "No commits to display"}
+									</p>
+									<span>
+										Open a repository to view its history.
+									</span>
+								</div>
+							) : (
+								<div className="commit-list">
+									{commits.map((commit) => (
+										<button
+											type="button"
+											className={`commit-row ${
+												selectedCommit?.sha ===
+												commit.sha
+													? "selected"
+													: ""
+											}`}
+											key={commit.sha}
+											onClick={() => selectCommit(commit)}
+											aria-pressed={
+												selectedCommit?.sha ===
+												commit.sha
+											}
+										>
+											<span className="commit-sha">
+												{commit.sha}
+											</span>
 
-						{error && (
-							<div className="error-message" role="alert">
-								<strong>Git Error</strong>
-								<p>{error}</p>
-								<button
-									type="button"
-									onClick={() => setError("")}
-									className="dismiss-error"
-								>
-									Dismiss
-								</button>
-							</div>
-						)}
+											<span className="commit-details">
+												<span className="commit-message">
+													{commit.message}
+												</span>
+												<span className="commit-meta">
+													{commit.author} ·{" "}
+													{commit.date}
+												</span>
+											</span>
+										</button>
+									))}
+								</div>
+							)}
+						</section>
 					</aside>
-					{/* COMMIT HISTORY — Independent layout section */}
-					<section className="history-panel">
-						<h2>Commit History</h2>
-
-						{commits.length === 0 ? (
-							<div className="empty-state">
-								<p>
-									{repoLoading
-										? "Loading repository..."
-										: "No commits to display"}
-								</p>
-								<span>
-									Open a repository to view its history.
-								</span>
-							</div>
-						) : (
-							<div className="commit-list">
-								{commits.map((commit) => (
-									<button
-										type="button"
-										className={`commit-row ${
-											selectedCommit?.sha === commit.sha
-												? "selected"
-												: ""
-										}`}
-										key={commit.sha}
-										onClick={() => selectCommit(commit)}
-										aria-pressed={
-											selectedCommit?.sha === commit.sha
-										}
-									>
-										<span className="commit-sha">
-											{commit.sha}
-										</span>
-
-										<span className="commit-details">
-											<span className="commit-message">
-												{commit.message}
-											</span>
-											<span className="commit-meta">
-												{commit.author} · {commit.date}
-											</span>
-										</span>
-									</button>
-								))}
-							</div>
-						)}
-					</section>
 				</div>
 				<div className="right-column">
-					{/* CENTER COLUMN — Working Changes and Commit History */}
+					{/* CENTER COLUMN — Working Changes */}
 					<section className="content">
 						<div className="working-changes-panel">
 							<div className="panel-heading">
@@ -2530,6 +2506,37 @@ function App() {
 					</aside>
 				</div>
 			</main>
+			<footer
+				className={`app-status-bar${error ? " app-status-error" : operationStatus ? " app-status-success" : ""}`}
+			>
+				{error ? (
+					<div className="app-status-content" role="alert">
+						<strong>Git Error</strong>
+						<span className="app-status-message">{error}</span>
+						<button type="button" onClick={() => setError("")}>
+							Dismiss
+						</button>
+					</div>
+				) : operationStatus ? (
+					<div className="app-status-content" role="status">
+						<strong>Operation Status</strong>
+						<span className="app-status-message">
+							{operationStatus}
+						</span>
+						<button
+							type="button"
+							onClick={() => setOperationStatus("")}
+						>
+							Dismiss
+						</button>
+					</div>
+				) : (
+					<div className="app-status-content">
+						<strong>Status</strong>
+						<span className="app-status-message">Ready</span>
+					</div>
+				)}
+			</footer>
 			{cloneDialogOpen && (
 				<div className="clone-dialog-overlay">
 					<section
