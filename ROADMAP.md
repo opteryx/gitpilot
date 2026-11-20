@@ -2,7 +2,7 @@
 
 GitPilot is a simple, cross-platform Git desktop client built with **Tauri, Rust, React, and Vite**. Its goal is to make everyday Git operations understandable without requiring command-line knowledge, a subscription, or a complicated interface.
 
-This is a living roadmap, not a fixed release schedule. Priorities may change as features are tested.
+This is a living roadmap, not a fixed release schedule. Priorities may change as features are tested. **Last updated: November 20, 2026.**
 
 ## Status legend
 
@@ -31,16 +31,16 @@ This is a living roadmap, not a fixed release schedule. Priorities may change as
 - [x] Manually refresh repository information without contacting GitHub.
 - [x] Automatically refresh repository information when the GitPilot window regains focus.
 
-## Phase 2 — Repository setup and remote management (Next)
+## Phase 2 — Repository setup and remote management (Complete)
 
-Implement these incrementally, with a working test after each feature.
+Implemented incrementally and tested using disposable repositories.
 
-- [X] **Clone Repository** — Accept a remote repository URL, let the user choose a local destination, and open the resulting repository in GitPilot. Support SSH first, using the existing noninteractive Git approach.
-- [X] **Add Remote** — Connect an existing local repository to an existing GitHub (or other Git-hosted) repository without using a terminal.
-- [X] **Manage Remotes** — View, edit, and remove configured remote URLs, distinguishing fetch and push URLs when necessary.
-- [X] **Set Upstream** — Choose the remote branch tracked by a local branch; make it possible to publish a branch that has no upstream yet.
-- [X] **Create GitHub Repository** — Create a public or private repository in the user's GitHub account. Requires an authentication strategy; do not assume the existing Git SSH key provides GitHub API authorization.
-- [X] **Publish Repository** — Guide the user through creating or selecting a remote, attaching it to a local project, setting upstream tracking, and pushing the initial branch.
+- [x] **Clone Repository** — Accept a remote repository URL, let the user choose a local destination, and open the resulting repository in GitPilot. Support SSH first, using the existing noninteractive Git approach.
+- [x] **Add Remote** — Connect an existing local repository to an existing GitHub (or other Git-hosted) repository without using a terminal.
+- [x] **Manage Remotes** — View, edit, and remove configured remote URLs, distinguishing fetch and push URLs when necessary.
+- [x] **Set Upstream** — Choose the remote branch tracked by a local branch; make it possible to publish a branch that has no upstream yet.
+- [x] **Create GitHub Repository** — Create a GitHub repository using GitHub CLI (`gh`) authentication; SSH authentication for Git operations is separate from GitHub CLI authentication.
+- [x] **Publish Repository** — Guide the user through creating or selecting a remote, attaching it to a local project, setting upstream tracking, and pushing the initial branch.
 
 ### Phase 2 design principles
 
@@ -49,12 +49,20 @@ Implement these incrementally, with a working test after each feature.
 - Give clear errors for missing authentication, existing remotes, and repositories with no commits.
 - Prefer using existing Git functionality rather than creating a separate implementation of Git behavior.
 
-## Phase 3 — Clarity and everyday usability (Planned)
+## Application branding (Complete)
 
-- [X] **Contextual tooltips** — Describe controls and Git terminology without requiring a tutorial.
-- [X] **Merge direction help** — State clearly that the selected branch is merged **into the currently checked-out branch**.
-- [X] **Tracking help** — Explain upstream, Ahead, Behind, and what Fetch changes.
-- [ ] **File status help** — Explain indicators such as `M`, `A`, `D`, `R`, `??`, and conflicted states.
+- [x] Add the GitPilot logo to the application masthead alongside the title and subtitle.
+- [x] Adjust masthead styling and logo sizing for the application layout.
+- [x] Replace the default Tauri desktop/application icons with GitPilot icons, including the bundled PNG, ICNS, and ICO assets.
+- [x] Verify the application displays the new icon instead of the default Tauri icon.
+- [x] Commit and push the branding changes (`Add GitPilot branding and application icons`, November 20, 2026).
+
+## Phase 3 — Clarity and everyday usability (Next)
+
+- [x] **Contextual tooltips** — Describe controls and Git terminology without requiring a tutorial.
+- [x] **Merge direction help** — State clearly that the selected branch is merged **into the currently checked-out branch**.
+- [x] **Tracking help** — Explain upstream, Ahead, Behind, and what Fetch changes.
+- [X] **File status help** — Explain indicators such as `M`, `A`, `D`, `R`, `??`, and conflicted states.
 - [ ] **Contextual help popups** — Offer optional, short explanations for unfamiliar operations.
 - [ ] **More precise Pull feedback** — Distinguish *Already up to date*, *Fast-forwarded to new commits*, and *Unable to fast-forward*.
 - [ ] **Actionable error messages** — Translate common Git errors into concise explanations and next steps.
@@ -70,14 +78,21 @@ Implement these incrementally, with a working test after each feature.
 - [ ] **Discard working changes** — Revert selected uncommitted changes with clear warnings and confirmation.
 - [ ] **Repository settings** — Display or edit common Git configuration, such as commit author name and email.
 
-## Recommended implementation order
+## Recommended implementation order (remaining work)
 
-1. Clone Repository.
-2. Add Remote.
-3. Manage Remotes and Set Upstream.
-4. Add essential tooltips and improve common error messages.
-5. Create GitHub Repository and Publish Repository.
-6. Reassess the Phase 4 backlog based on actual usage.
+1. Complete **File status help**, including untracked and conflict indicators.
+2. Improve **Pull feedback** and common **Git error messages** so results and next steps are clear.
+3. Ensure **selected commit and file details stay accurate after refresh**.
+4. Add optional **contextual help popups** only where tooltips are insufficient.
+5. Handle **binary file differences** gracefully.
+6. Reassess additional Git functionality (Phase 4), then plan **cross-platform testing and packaging**.
+
+## Release preparation (Planned)
+
+- [ ] Test builds and everyday workflows on Linux, Windows, and macOS.
+- [ ] Verify application icons, native dialogs, and Git/SSH behavior on each supported platform.
+- [ ] Document installation prerequisites and authentication setup.
+- [ ] Build and test installable application packages for supported platforms.
 
 ## Development workflow
 

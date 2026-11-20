@@ -62,6 +62,7 @@ function getRepositoryName(url) {
 
 function App() {
 	const [branch, setBranch] = useState("");
+	const [branchHelpOpen, setBranchHelpOpen] = useState(false);
 	const [branches, setBranches] = useState([]);
 	const [remotes, setRemotes] = useState("");
 	const [remoteBranches, setRemoteBranches] = useState([]);
@@ -1762,7 +1763,94 @@ function App() {
 							</div>
 						)}
 
-						<h3>Current Branch</h3>
+						<div className="branch-help-heading">
+							<h3>Current Branch</h3>
+
+							<button
+								type="button"
+								className="branch-help-button"
+								onClick={() =>
+									setBranchHelpOpen(!branchHelpOpen)
+								}
+								aria-label="Help with branches"
+								aria-expanded={branchHelpOpen}
+								title="Explain branches and upstream tracking"
+							>
+								?
+							</button>
+
+							{branchHelpOpen && (
+								<div
+									className="branch-help-popup"
+									role="tooltip"
+								>
+									<strong>Understanding Branches</strong>
+
+									<p>
+										<strong>Current Branch:</strong> The
+										branch you're working on.
+									</p>
+									<p>
+										<strong>Local Branches:</strong>{" "}
+										Branches stored on your computer.
+									</p>
+									<p>
+										<strong>Upstream:</strong> The remote
+										branch your current branch tracks.
+									</p>
+									<p>
+										<strong>Ahead:</strong> Local commits
+										not yet pushed.
+									</p>
+									<p>
+										<strong>Behind:</strong> Remote commits
+										not yet incorporated locally.
+									</p>
+								</div>
+							)}
+						</div>
+
+						{branchHelpOpen && (
+							<div className="branch-help-popup">
+								<strong>Understanding Branches</strong>
+
+								<p>
+									<strong>Current Branch:</strong> The local
+									branch you're currently working on.
+								</p>
+
+								<p>
+									<strong>Local Branches:</strong> Branches
+									stored on your computer. You can switch
+									between them without contacting GitHub.
+								</p>
+
+								<p>
+									<strong>Upstream:</strong> The remote branch
+									your current branch tracks, usually on
+									GitHub.
+								</p>
+
+								<p>
+									<strong>Ahead:</strong> The number of local
+									commits that haven't been pushed to the
+									upstream branch.
+								</p>
+
+								<p>
+									<strong>Behind:</strong> The number of
+									upstream commits that haven't been
+									incorporated into your local branch.
+								</p>
+
+								<button
+									type="button"
+									onClick={() => setBranchHelpOpen(false)}
+								>
+									Close
+								</button>
+							</div>
+						)}
 
 						{branch ? (
 							<p className="branch-name">{branch}</p>
@@ -2155,7 +2243,48 @@ function App() {
 													file.path
 												}
 											>
-												<span className="working-change-status">
+												<span
+													className="working-change-status"
+													title={
+														isConflicted(file)
+															? "Conflicted: Git could not automatically combine changes. Resolve the conflict before committing."
+															: file.indexStatus ===
+																		"?" &&
+																  file.worktreeStatus ===
+																		"?"
+																? "Untracked: This file is not yet tracked by Git. Stage it to include it in the next commit."
+																: file.indexStatus !==
+																			" " &&
+																	  file.worktreeStatus !==
+																			" "
+																	? "Staged + Unstaged: Some changes are staged for the next commit, while newer changes remain unstaged."
+																	: file.indexStatus !==
+																		  " "
+																		? file.indexStatus ===
+																			"M"
+																			? "Staged Modified: Changes to an existing file are ready for the next commit."
+																			: file.indexStatus ===
+																				  "A"
+																				? "Staged Added: A new file is ready to be included in the next commit."
+																				: file.indexStatus ===
+																					  "D"
+																					? "Staged Deleted: The deletion of this file will be recorded in the next commit."
+																					: file.indexStatus ===
+																						  "R"
+																						? "Staged Renamed: The file rename will be recorded in the next commit."
+																						: "Staged: Changes to this file are ready for the next commit."
+																		: file.worktreeStatus ===
+																			  "D"
+																			? "Deleted: A tracked file has been removed. Stage the deletion to include it in the next commit."
+																			: file.worktreeStatus ===
+																				  "A"
+																				? "Added: A new file has been added to the working directory."
+																				: file.worktreeStatus ===
+																					  "R"
+																					? "Renamed: Git detected that this file has been renamed."
+																					: "Modified: This tracked file has changes that are not yet staged."
+													}
+												>
 													{isConflicted(file)
 														? "Conflicted"
 														: file.indexStatus ===
@@ -2168,7 +2297,19 @@ function App() {
 																? file.worktreeStatus !==
 																	" "
 																	? "Staged + Unstaged"
-																	: "Staged"
+																	: file.indexStatus ===
+																		  "M"
+																		? "Staged Modified"
+																		: file.indexStatus ===
+																			  "A"
+																			? "Staged Added"
+																			: file.indexStatus ===
+																				  "D"
+																				? "Staged Deleted"
+																				: file.indexStatus ===
+																					  "R"
+																					? "Staged Renamed"
+																					: "Staged"
 																: file.worktreeStatus ===
 																	  "D"
 																	? "Deleted"
