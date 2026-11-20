@@ -2264,11 +2264,12 @@ function App() {
 									!commitMessage.trim() ||
 									commitLoading ||
 									workingChanges.some(isConflicted) ||
-									!workingChanges.some(
-										(file) =>
-											file.indexStatus !== " " &&
-											file.indexStatus !== "?",
-									)
+									(!mergeInProgress &&
+										!workingChanges.some(
+											(file) =>
+												file.indexStatus !== " " &&
+												file.indexStatus !== "?",
+										))
 								}
 							>
 								{commitLoading ? "Committing..." : "Commit"}
