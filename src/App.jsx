@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
+import gitpilotLogo from "./assets/gitpilot-logo-masthead.svg";
 
 function DiffViewer({ content, isDiff = true }) {
 	if (!isDiff) return <pre className="file-diff">{content}</pre>;
@@ -1453,10 +1454,17 @@ function App() {
 	return (
 		<div className="app">
 			<header className="app-header">
-				<h1>GitPilot</h1>
-				<span className="app-subtitle">
-					A simple Git desktop client
-				</span>
+				<img
+					src={gitpilotLogo}
+					alt="GitPilot logo"
+					className="app-logo"
+				/>
+				<div className="app-header-text">
+					<h1>GitPilot</h1>
+					<span className="app-subtitle">
+						A simple Git desktop client
+					</span>
+				</div>
 			</header>
 
 			<main className="app-main">

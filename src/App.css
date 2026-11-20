@@ -35,16 +35,29 @@ button {
 
 .app-header {
 	display: flex;
-	align-items: baseline;
-	gap: 16px;
+	align-items: center;
+	gap: 10px;
 	flex-shrink: 0;
-	padding: 14px 20px;
+	padding: 12px 20px;
 	background: #263445;
 	color: white;
 }
 
+.app-logo {
+	width: 48px;
+	height: 48px;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+.app-header-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
 .app-header h1 {
-	margin: 0;
+	margin: 4px 0 0;
 	font-size: 22px;
 	font-weight: 600;
 }
