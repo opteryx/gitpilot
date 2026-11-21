@@ -67,7 +67,7 @@ Implemented incrementally and tested using disposable repositories.
 - [x] **More precise Pull feedback** — Distinguish *Already up to date*, *Fast-forwarded to new commits*, and *Unable to fast-forward*.
 - [x] **Sidebar styling cleanup** — Standardize section headings, typography, separator spacing, and contextual help icon alignment.
 - [x] **Actionable error messages** — Translate common Git errors into concise explanations and next steps.
-- [ ] **Refresh selected details** — When a refresh changes or removes a selected commit/file, keep its details accurate or clear the selection gracefully.
+- [x] **Refresh selected details** — When a refresh changes or removes a selected commit/file, keep its details accurate or clear the selection gracefully.
 
 ## Phase 4 — Additional Git functionality (Considering)
 

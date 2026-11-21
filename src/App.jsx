@@ -716,12 +716,46 @@ function App() {
 			setRemotes(remoteList);
 			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
-			setCommits(parseCommitHistory(history));
 
-			await Promise.all([
+			const refreshedCommits = parseCommitHistory(history);
+			setCommits(refreshedCommits);
+
+			// Preserve the selected commit when it still exists
+			// in the refreshed history.
+			if (selectedCommit && !selectedWorkingFile) {
+				const updatedCommit = refreshedCommits.find(
+					(commit) => commit.sha === selectedCommit.sha,
+				);
+
+				if (updatedCommit) {
+					setSelectedCommit(updatedCommit);
+				} else {
+					// The selected commit is no longer in the
+					// displayed history.
+					clearSelection();
+				}
+			}
+
+			const [changes] = await Promise.all([
 				refreshWorkingChanges(path),
 				refreshMergeStatus(path),
 			]);
+
+			// Keep the selected working file synchronized with the
+			// refreshed repository state.
+			if (changes && selectedWorkingFile) {
+				const updatedFile = changes.find(
+					(file) => file.path === selectedWorkingFile.path,
+				);
+
+				if (updatedFile) {
+					setSelectedWorkingFile(updatedFile);
+					await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+				} else {
+					// The file is no longer in Working Changes.
+					clearSelection();
+				}
+			}
 
 			setOperationStatus("Repository refreshed.");
 		} catch (err) {
@@ -1085,6 +1119,25 @@ function App() {
 		} finally {
 			if (id === workingChangesRequestId.current)
 				setChangesLoading(false);
+		}
+	}
+
+	async function refreshWorkingChangesAndSelection() {
+		if (!repoPath) return;
+
+		const changes = await refreshWorkingChanges();
+
+		if (changes && selectedWorkingFile) {
+			const updatedFile = changes.find(
+				(file) => file.path === selectedWorkingFile.path,
+			);
+
+			if (updatedFile) {
+				setSelectedWorkingFile(updatedFile);
+				await refreshWorkingFileDiff(updatedFile, workingDiffMode);
+			} else {
+				clearSelection();
+			}
 		}
 	}
 
@@ -2235,7 +2288,9 @@ function App() {
 								<div className="working-changes-actions">
 									<button
 										type="button"
-										onClick={() => refreshWorkingChanges()}
+										onClick={
+											refreshWorkingChangesAndSelection
+										}
 										disabled={!repoPath || changesLoading}
 									>
 										{changesLoading
