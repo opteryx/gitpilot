@@ -90,7 +90,6 @@ button {
 
 .history-panel {
 	min-width: 0;
-	margin-top: 24px;
 }
 
 .details-panel {
@@ -115,25 +114,26 @@ button {
 	flex-shrink: 0;
 }
 
-.sidebar h3 {
-	margin-top: 32px;
+/* Sidebar section headings share one type scale and one spacing system.
+   Repository remains a larger panel heading (16px); these are sections (14px). */
+.sidebar .branch-help-heading h3,
+.sidebar .branch-list > h3,
+.sidebar .history-panel > h2 {
+	margin: 0;
 	font-size: 14px;
+	font-weight: 700;
+	line-height: 20px;
 }
 
-/* Subtle separators between the main repository sidebar sections.
-   Keep the existing layout and both scroll areas unchanged. */
-.sidebar .remote-list > h3,
-.sidebar > h3,
+/* Every section begins with the same separator and vertical rhythm. */
+.sidebar .remote-list > .branch-help-heading,
+.sidebar > .branch-help-heading,
 .sidebar .branch-list > h3,
 .sidebar .history-panel > h2 {
 	border-top: 1px solid #bbc7d4;
-	padding-top: 13px;
-}
-
-/* Reduce empty space without crowding the controls. */
-.sidebar .remote-list > h3,
-.sidebar > h3 {
-	margin-top: 20px;
+	margin-top: 18px;
+	padding-top: 12px;
+	margin-bottom: 10px;
 }
 
 /* Merge status warning */
@@ -205,15 +205,6 @@ button {
 	font-size: 14px;
 	font-weight: 600;
 	color: #356a9a;
-}
-
-.branch-list {
-	margin-top: 20px;
-}
-
-.branch-list h3 {
-	margin: 0 0 10px;
-	font-size: 13px;
 }
 
 .branch-item {
@@ -1208,10 +1199,6 @@ button:not(
 	position: relative;
 }
 
-.branch-help-heading h3 {
-	margin: 20px 0 10px;
-}
-
 .branch-help-button {
 	width: 18px !important;
 	height: 18px;
@@ -1222,7 +1209,6 @@ button:not(
 	font-weight: bold !important;
 	line-height: 1 !important;
 	text-align: center;
-	transform: translateY(4px);
 }
 
 .branch-help-popup {

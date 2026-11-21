@@ -539,14 +539,54 @@ async fn pull_current_branch(repo_path: String) -> Result<String, String> {
     // safeguards and 45-second timeout.
     fetch_remote(repo_path.clone(), remote).await?;
 
-    // Apply fetched changes locally, only if fast-forward is possible.
+    // Compare local and upstream commits after fetching. Only advance the
+    // current branch when the update is a true fast-forward.
     tauri::async_runtime::spawn_blocking(move || {
         check_pull_safety(&repo_path)?;
 
-        run_git(&repo_path, &["merge", "--ff-only", "@{upstream}"])?;
+        // The two numbers are commits unique to HEAD (ahead) and to the
+        // upstream branch (behind), respectively.
+        let counts = run_git(
+            &repo_path,
+            &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+        )?;
+
+        let mut parts = counts.split_whitespace();
+        let ahead = parts
+            .next()
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| format!("Unable to read local commit count: '{counts}'."))?;
+        let behind = parts
+            .next()
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| format!("Unable to read upstream commit count: '{counts}'."))?;
+
+        if parts.next().is_some() {
+            return Err(format!("Unexpected commit counts returned by Git: '{counts}'."));
+        }
+
+        if behind == 0 {
+            return Ok(if ahead == 0 {
+                format!("Already up to date. Branch '{branch}' matches its upstream.")
+            } else {
+                format!(
+                    "No remote commits to pull. Branch '{branch}' is ahead by {ahead} local commit(s)."
+                )
+            });
+        }
+
+        if ahead > 0 {
+            return Err(format!(
+                "Cannot fast-forward branch '{branch}': local and upstream histories have diverged \
+                 ({ahead} local and {behind} remote-only commit(s)). No changes were applied."
+            ));
+        }
+
+        run_git(&repo_path, &["merge", "--ff-only", "@{upstream}"])
+            .map_err(|error| format!("Could not fast-forward branch '{branch}': {error}"))?;
 
         Ok(format!(
-            "Pull completed successfully for branch '{branch}'."
+            "Fast-forward successful. Updated branch '{branch}' with {behind} remote commit(s)."
         ))
     })
     .await

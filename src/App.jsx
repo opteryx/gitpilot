@@ -1866,48 +1866,6 @@ function App() {
 							)}
 						</div>
 
-						{branchHelpOpen && (
-							<div className="branch-help-popup">
-								<strong>Understanding Branches</strong>
-
-								<p>
-									<strong>Current Branch:</strong> The local
-									branch you're currently working on.
-								</p>
-
-								<p>
-									<strong>Local Branches:</strong> Branches
-									stored on your computer. You can switch
-									between them without contacting GitHub.
-								</p>
-
-								<p>
-									<strong>Upstream:</strong> The remote branch
-									your current branch tracks, usually on
-									GitHub.
-								</p>
-
-								<p>
-									<strong>Ahead:</strong> The number of local
-									commits that haven't been pushed to the
-									upstream branch.
-								</p>
-
-								<p>
-									<strong>Behind:</strong> The number of
-									upstream commits that haven't been
-									incorporated into your local branch.
-								</p>
-
-								<button
-									type="button"
-									onClick={() => setBranchHelpOpen(false)}
-								>
-									Close
-								</button>
-							</div>
-						)}
-
 						{branch ? (
 							<p className="branch-name">{branch}</p>
 						) : (
