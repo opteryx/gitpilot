@@ -1235,3 +1235,29 @@ button:not(
 .branch-help-popup strong {
 	font-weight: 600;
 }
+
+/* Collapsible technical Git error details */
+
+.git-error-details {
+	margin-top: 4px;
+	font-size: 11px;
+	color: #805050;
+}
+
+.git-error-details summary {
+	width: fit-content;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.git-error-details pre {
+	margin: 6px 0 0;
+	padding: 6px 8px;
+	background: rgba(0, 0, 0, 0.04);
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 11px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}

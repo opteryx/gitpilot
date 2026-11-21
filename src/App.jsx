@@ -60,6 +60,66 @@ function getRepositoryName(url) {
 	return lastPart.replace(/\.git$/i, "");
 }
 
+function formatGitError(error) {
+	const message = String(error);
+	const lower = message.toLowerCase();
+
+	if (
+		lower.includes("no upstream configured") ||
+		lower.includes("no upstream branch") ||
+		lower.includes("has no upstream")
+	) {
+		return (
+			"This branch has no upstream configured. " +
+			"Use Set Upstream to select a remote branch, " +
+			"or Publish Branch to create one.\n" +
+			"Git details: " +
+			message
+		);
+	}
+
+	if (
+		lower.includes("no configured push destination") ||
+		lower.includes("no remotes configured")
+	) {
+		return (
+			"No remote destination is configured. " +
+			"Use Add Remote to connect this repository " +
+			"to GitHub or another Git server.\n" +
+			"Git details: " +
+			message
+		);
+	}
+
+	if (
+		lower.includes("permission denied (publickey)") ||
+		lower.includes("authentication failed")
+	) {
+		return (
+			"Git could not authenticate with the remote server. " +
+			"Check your SSH key or Git credentials.\n" +
+			"Git details: " +
+			message
+		);
+	}
+
+	if (
+		lower.includes("non-fast-forward") ||
+		lower.includes("failed to push some refs")
+	) {
+		return (
+			"The push was rejected. The remote branch may " +
+			"contain commits that aren't in your local branch. " +
+			"Fetch to check for updates before trying again.\n" +
+			"Git details: " +
+			message
+		);
+	}
+
+	// Preserve errors we don't recognize.
+	return message;
+}
+
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branchHelpOpen, setBranchHelpOpen] = useState(false);
@@ -1453,6 +1513,10 @@ function App() {
 		}
 	}
 
+	const friendlyError = formatGitError(error);
+	const hasFriendlyExplanation = friendlyError !== String(error);
+	const errorExplanation = friendlyError.split("\nGit details: ")[0];
+
 	return (
 		<div className="app">
 			<header className="app-header">
@@ -2676,7 +2740,16 @@ function App() {
 				{error ? (
 					<div className="app-status-content" role="alert">
 						<strong>Git Error</strong>
-						<span className="app-status-message">{error}</span>
+						<span className="app-status-message">
+							{errorExplanation}
+
+							{hasFriendlyExplanation && (
+								<details className="git-error-details">
+									<summary>Show technical details</summary>
+									<pre>{String(error)}</pre>
+								</details>
+							)}
+						</span>
 						<button type="button" onClick={() => setError("")}>
 							Dismiss
 						</button>
