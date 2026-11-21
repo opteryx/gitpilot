@@ -63,6 +63,7 @@ function getRepositoryName(url) {
 function App() {
 	const [branch, setBranch] = useState("");
 	const [branchHelpOpen, setBranchHelpOpen] = useState(false);
+	const [remoteHelpOpen, setRemoteHelpOpen] = useState(false);
 	const [branches, setBranches] = useState([]);
 	const [remotes, setRemotes] = useState("");
 	const [remoteBranches, setRemoteBranches] = useState([]);
@@ -1577,7 +1578,62 @@ function App() {
 
 						{repoPath && (
 							<div className="remote-list">
-								<h3>Remote Repositories</h3>
+								<div className="branch-help-heading">
+									<h3>Remote Repositories</h3>
+
+									<button
+										type="button"
+										className="branch-help-button"
+										onClick={() =>
+											setRemoteHelpOpen(!remoteHelpOpen)
+										}
+										aria-label="Help with remote repositories"
+										aria-expanded={remoteHelpOpen}
+										title="Explain remote repository operations"
+									>
+										?
+									</button>
+
+									{remoteHelpOpen && (
+										<div className="branch-help-popup">
+											<strong>Remote Repositories</strong>
+
+											<p>
+												<strong>Remote:</strong> A
+												connection to a Git repository
+												on another computer or hosting
+												service, such as GitHub.
+											</p>
+
+											<p>
+												<strong>Fetch:</strong> Download
+												information about remote commits
+												and branches without changing
+												your working files.
+											</p>
+
+											<p>
+												<strong>Pull:</strong> Download
+												remote changes and update your
+												current branch. GitPilot only
+												allows fast-forward pulls.
+											</p>
+
+											<p>
+												<strong>Push:</strong> Upload
+												your local commits to the
+												configured remote branch.
+											</p>
+
+											<p>
+												<strong>Tracking:</strong> The
+												relationship between your local
+												branch and its upstream remote
+												branch.
+											</p>
+										</div>
+									)}
+								</div>
 
 								<button
 									type="button"

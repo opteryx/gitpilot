@@ -62,8 +62,8 @@ Implemented incrementally and tested using disposable repositories.
 - [x] **Contextual tooltips** — Describe controls and Git terminology without requiring a tutorial.
 - [x] **Merge direction help** — State clearly that the selected branch is merged **into the currently checked-out branch**.
 - [x] **Tracking help** — Explain upstream, Ahead, Behind, and what Fetch changes.
-- [X] **File status help** — Explain indicators such as `M`, `A`, `D`, `R`, `??`, and conflicted states.
-- [ ] **Contextual help popups** — Offer optional, short explanations for unfamiliar operations.
+- [x] **File status help** — Explain indicators such as `M`, `A`, `D`, `R`, `??`, and conflicted states.
+- [x] **Contextual help popups** — Offer optional, short explanations for unfamiliar operations.
 - [ ] **More precise Pull feedback** — Distinguish *Already up to date*, *Fast-forwarded to new commits*, and *Unable to fast-forward*.
 - [ ] **Actionable error messages** — Translate common Git errors into concise explanations and next steps.
 - [ ] **Refresh selected details** — When a refresh changes or removes a selected commit/file, keep its details accurate or clear the selection gracefully.
