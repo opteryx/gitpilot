@@ -243,7 +243,6 @@ async fn push_current_branch(repo_path: String) -> Result<String, String> {
         let mut child = Command::new("git")
             .arg("-C")
             .arg(&repo_path)
-            .args(["-c", "credential.helper="])
             .args(["-c", "core.askPass="])
             .args(["-c", "http.lowSpeedLimit=1000"])
             .args(["-c", "http.lowSpeedTime=20"])
@@ -378,7 +377,6 @@ async fn publish_branch(repo_path: String, remote_name: String) -> Result<String
         let mut child = Command::new("git")
             .arg("-C")
             .arg(&repo_path)
-            .args(["-c", "credential.helper="])
             .args(["-c", "core.askPass="])
             .args(["-c", "http.lowSpeedLimit=1000"])
             .args(["-c", "http.lowSpeedTime=20"])
@@ -598,8 +596,9 @@ async fn pull_current_branch(repo_path: String) -> Result<String, String> {
     .map_err(|error| error.to_string())?
 }
 
-// Fetch runs on a blocking worker, not the Tauri UI thread. Credentials are
-// intentionally noninteractive for now; a future login flow can be added.
+// Fetch runs on a blocking worker, not the Tauri UI thread. Git may use a
+// previously configured credential helper (such as GitHub CLI) for HTTPS.
+// Terminal and askpass prompts remain disabled to avoid hanging the UI.
 #[tauri::command]
 async fn fetch_remote(repo_path: String, remote_name: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -617,8 +616,7 @@ async fn fetch_remote(repo_path: String, remote_name: String) -> Result<String, 
         let mut child = Command::new("git")
             .arg("-C")
             .arg(&repo_path)
-            // Do not invoke VS Code/Git Credential Manager credential helpers.
-            .args(["-c", "credential.helper="])
+            // Honor preconfigured HTTPS helpers while blocking interactive prompts.
             .args(["-c", "core.askPass="])
             .args(["-c", "http.lowSpeedLimit=1000"])
             .args(["-c", "http.lowSpeedTime=20"])
@@ -753,7 +751,6 @@ async fn clone_repository(
 
         // Launch Git without involving a command shell.
         let mut child = Command::new("git")
-            .args(["-c", "credential.helper="])
             .args(["-c", "core.askPass="])
             .args(["-c", "http.lowSpeedLimit=1000"])
             .args(["-c", "http.lowSpeedTime=20"])
