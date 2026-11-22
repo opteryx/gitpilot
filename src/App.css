@@ -1261,3 +1261,27 @@ button:not(
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+
+/* Phase 4 utilities use the sidebar's compact controls and section rhythm. */
+.phase4-tools {
+	border-top: 1px solid #bbc7d4;
+	margin-top: 18px;
+	padding-top: 12px;
+}
+
+.phase4-tools h3 {
+	margin: 0 0 10px;
+	font-size: 14px;
+	line-height: 20px;
+}
+
+.phase4-tools > button + button {
+	margin-top: 4px;
+}
+
+.phase4-hint {
+	font-size: 11px;
+	color: #566477;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
+}

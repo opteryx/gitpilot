@@ -121,6 +121,14 @@ function formatGitError(error) {
 }
 
 function App() {
+	const [initLoading, setInitLoading] = useState(false);
+	const [stashBusy, setStashBusy] = useState(false);
+	const [discardBusy, setDiscardBusy] = useState(false);
+	const [stashEntries, setStashEntries] = useState([]);
+	const [authorOpen, setAuthorOpen] = useState(false);
+	const [authorName, setAuthorName] = useState("");
+	const [authorEmail, setAuthorEmail] = useState("");
+	const [authorBusy, setAuthorBusy] = useState(false);
 	const [branch, setBranch] = useState("");
 	const [branchHelpOpen, setBranchHelpOpen] = useState(false);
 	const [remoteHelpOpen, setRemoteHelpOpen] = useState(false);
@@ -202,7 +210,10 @@ function App() {
 		!pullingBranch &&
 		!branchBusy &&
 		!commitLoading &&
-		!mergeInProgress;
+		!mergeInProgress &&
+		!stashBusy &&
+		!discardBusy &&
+		!initLoading;
 
 	// Refresh the repository when GitPilot regains focus.
 	useEffect(() => {
@@ -716,6 +727,7 @@ function App() {
 			setRemotes(remoteList);
 			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
+			await loadStashes(path);
 
 			const refreshedCommits = parseCommitHistory(history);
 			setCommits(refreshedCommits);
@@ -993,6 +1005,8 @@ function App() {
 			setRemoteBranches([]);
 			setUpstreamStatus("");
 			setRepoPath("");
+			setStashEntries([]);
+			setAuthorOpen(false);
 			setCommits([]);
 			clearSelection();
 
@@ -1031,6 +1045,7 @@ function App() {
 			setRemoteBranches(availableRemoteBranches);
 			setUpstreamStatus(trackingStatus);
 			setRepoPath(rootPath);
+			await loadStashes(rootPath);
 			setNewBranchName("");
 			setSwitchAfterCreate(true);
 			setCommits(parseCommitHistory(history));
@@ -1566,9 +1581,219 @@ function App() {
 		}
 	}
 
+	async function initializeRepository() {
+		if (initLoading || repoLoading || stashBusy || discardBusy) return;
+		try {
+			const folder = await open({
+				directory: true,
+				multiple: false,
+				title: "Choose Folder to Initialize",
+			});
+			if (!folder) return;
+			const confirmed = await ask(
+				`Initialize a new Git repository here?\n\n${folder}\n\nExisting files will not be deleted.`,
+				{
+					title: "Initialize Repository",
+					kind: "warning",
+					okLabel: "Initialize",
+					cancelLabel: "Cancel",
+				},
+			);
+			if (!confirmed) return;
+			setInitLoading(true);
+			setError("");
+			const path = await invoke("initialize_repository", {
+				folderPath: folder,
+			});
+			const opened = await openRepositoryAtPath(path);
+			if (opened) {
+				setOperationStatus(
+					`Initialized Git repository: ${path}. Create your first commit when ready.`,
+				);
+			} else {
+				setError(
+					`Repository initialized at ${path}, but GitPilot could not open it automatically.`,
+				);
+			}
+		} catch (err) {
+			setError(String(err));
+		} finally {
+			setInitLoading(false);
+		}
+	}
+
+	async function loadStashes(path = repoPath) {
+		if (!path) return;
+		const requestId = repoRequestId.current;
+		try {
+			const stashes = await invoke("get_stashes", { repoPath: path });
+			if (requestId === repoRequestId.current) setStashEntries(stashes);
+		} catch (err) {
+			if (requestId === repoRequestId.current) setError(String(err));
+		}
+	}
+
+	async function saveStash() {
+		if (
+			!repoPath ||
+			stashBusy ||
+			discardBusy ||
+			repoLoading ||
+			mergeInProgress
+		)
+			return;
+		const confirmed = await ask(
+			"Save all staged, unstaged, and untracked changes in a stash? Ignored files will not be saved.",
+			{
+				title: "Stash Changes",
+				kind: "warning",
+				okLabel: "Stash",
+				cancelLabel: "Cancel",
+			},
+		);
+		if (!confirmed) return;
+		const requestId = repoRequestId.current;
+		const path = repoPath;
+		setStashBusy(true);
+		setError("");
+		try {
+			const message = await invoke("stash_changes", { repoPath: path });
+			if (requestId !== repoRequestId.current) return;
+			clearSelection();
+			await refreshRepository();
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				await refreshRepository();
+				setError(String(err));
+			}
+		} finally {
+			setStashBusy(false);
+		}
+	}
+
+	async function restoreStash() {
+		if (
+			!repoPath ||
+			stashBusy ||
+			discardBusy ||
+			repoLoading ||
+			!stashEntries.length ||
+			mergeInProgress
+		)
+			return;
+		const confirmed = await ask(
+			`Apply the latest stash?\n\n${stashEntries[0]}\n\nThe working directory must be clean. The stash will be retained as a backup.`,
+			{
+				title: "Apply Latest Stash",
+				kind: "warning",
+				okLabel: "Apply",
+				cancelLabel: "Cancel",
+			},
+		);
+		if (!confirmed) return;
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+		setStashBusy(true);
+		setError("");
+		try {
+			const message = await invoke("apply_stash", { repoPath: path });
+			if (requestId !== repoRequestId.current) return;
+			clearSelection();
+			await refreshRepository();
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				await refreshRepository();
+				setError(String(err));
+			}
+		} finally {
+			setStashBusy(false);
+		}
+	}
+
+	async function discardWorkingFile(file) {
+		if (
+			!repoPath ||
+			discardBusy ||
+			stashBusy ||
+			repoLoading ||
+			isConflicted(file) ||
+			file.worktreeStatus === " " ||
+			file.indexStatus === "?"
+		)
+			return;
+		const confirmed = await ask(
+			`Permanently discard UNSTAGED changes in:\n\n${file.path}\n\nStaged changes will remain. This cannot be undone through GitPilot.`,
+			{
+				title: "Discard Unstaged Changes",
+				kind: "warning",
+				okLabel: "Discard",
+				cancelLabel: "Cancel",
+			},
+		);
+		if (!confirmed) return;
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+		setDiscardBusy(true);
+		setError("");
+		try {
+			const message = await invoke("discard_unstaged_file", {
+				repoPath: path,
+				filePath: file.path,
+			});
+			if (requestId !== repoRequestId.current) return;
+			await refreshWorkingChangesAndSelection();
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) setError(String(err));
+		} finally {
+			setDiscardBusy(false);
+		}
+	}
+
+	async function openAuthorSettings() {
+		if (!repoPath || authorBusy || stashBusy || discardBusy) return;
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+		try {
+			const [name, email] = await invoke("get_author_settings", {
+				repoPath: path,
+			});
+			if (requestId !== repoRequestId.current) return;
+			setAuthorName(name);
+			setAuthorEmail(email);
+			setAuthorOpen(true);
+		} catch (err) {
+			if (requestId === repoRequestId.current) setError(String(err));
+		}
+	}
+
+	async function saveAuthorSettings() {
+		if (!repoPath || authorBusy) return;
+		const requestId = repoRequestId.current;
+		setAuthorBusy(true);
+		setError("");
+		try {
+			const message = await invoke("save_author_settings", {
+				repoPath,
+				name: authorName,
+				email: authorEmail,
+			});
+			if (requestId !== repoRequestId.current) return;
+			setAuthorOpen(false);
+			setOperationStatus(message);
+		} catch (err) {
+			if (requestId === repoRequestId.current) setError(String(err));
+		} finally {
+			setAuthorBusy(false);
+		}
+	}
+
 	const friendlyError = formatGitError(error);
 	const hasFriendlyExplanation = friendlyError !== String(error);
 	const errorExplanation = friendlyError.split("\nGit details: ")[0];
+	const phase4Busy = initLoading || stashBusy || discardBusy || authorBusy;
 
 	return (
 		<div className="app">
@@ -1586,7 +1811,11 @@ function App() {
 				</div>
 			</header>
 
-			<main className="app-main">
+			<main
+				className="app-main"
+				inert={phase4Busy ? "" : undefined}
+				aria-busy={phase4Busy}
+			>
 				<div className="left-column">
 					{/* LEFT COLUMN — Repository */}
 					<aside className="sidebar">
@@ -1608,6 +1837,26 @@ function App() {
 							}
 						>
 							{repoLoading ? "Loading..." : "Open Repository"}
+						</button>
+
+						<button
+							type="button"
+							onClick={initializeRepository}
+							disabled={
+								initLoading ||
+								stashBusy ||
+								discardBusy ||
+								repoLoading ||
+								branchBusy ||
+								Boolean(fetchingRemote) ||
+								pushingBranch ||
+								pullingBranch
+							}
+							title="Create a Git repository in an existing folder. Git: git init"
+						>
+							{initLoading
+								? "Initializing..."
+								: "Initialize Repository"}
 						</button>
 
 						<button
@@ -2223,6 +2472,63 @@ function App() {
 								</div>
 							</div>
 						)}
+						{repoPath && (
+							<section className="phase4-tools">
+								<h3>Stash &amp; Settings</h3>
+								<button
+									type="button"
+									onClick={saveStash}
+									disabled={
+										stashBusy ||
+										discardBusy ||
+										repoLoading ||
+										branchBusy ||
+										mergeInProgress ||
+										workingChanges.length === 0
+									}
+									title="Save staged, unstaged and untracked changes temporarily. Git: git stash push -u"
+								>
+									{stashBusy ? "Working..." : "Stash Changes"}
+								</button>
+								<button
+									type="button"
+									onClick={restoreStash}
+									disabled={
+										stashBusy ||
+										discardBusy ||
+										repoLoading ||
+										branchBusy ||
+										mergeInProgress ||
+										stashEntries.length === 0 ||
+										workingChanges.length !== 0
+									}
+									title="Restore staged and unstaged changes from the latest stash; keep a backup. Git: git stash apply --index stash@{0}"
+								>
+									{stashBusy
+										? "Working..."
+										: "Apply Latest Stash"}
+								</button>
+								<p className="phase4-hint">
+									{stashEntries.length
+										? `${stashEntries.length} saved stash(es). Latest: ${stashEntries[0]}`
+										: "No saved stashes"}
+								</p>
+								<button
+									type="button"
+									onClick={openAuthorSettings}
+									disabled={
+										authorBusy ||
+										stashBusy ||
+										discardBusy ||
+										repoLoading ||
+										branchBusy
+									}
+									title="Edit local author name and email for this repository only. Git: git config --local"
+								>
+									Repository Author Settings
+								</button>
+							</section>
+						)}
 						{/* COMMIT HISTORY — Following branch management in the scrolling sidebar */}
 						<section className="history-panel">
 							<h2>Commit History</h2>
@@ -2235,7 +2541,9 @@ function App() {
 											: "No commits to display"}
 									</p>
 									<span>
-										Open a repository to view its history.
+										{repoPath
+											? "Create your first commit to get started."
+											: "Open a repository to view its history."}
 									</span>
 								</div>
 							) : (
@@ -2507,6 +2815,29 @@ function App() {
 															}
 														>
 															Unstage
+														</button>
+													)}
+												{file.worktreeStatus !== " " &&
+													file.indexStatus !== "?" &&
+													!isConflicted(file) && (
+														<button
+															type="button"
+															className="stage-file-button button-danger"
+															disabled={
+																discardBusy ||
+																stashBusy ||
+																repoLoading
+															}
+															onClick={() =>
+																discardWorkingFile(
+																	file,
+																)
+															}
+															title={`Permanently discard unstaged edits in ${file.path}. Git: git restore --worktree -- "${file.path}"`}
+														>
+															{discardBusy
+																? "Discarding..."
+																: "Discard"}
 														</button>
 													)}
 											</>
@@ -2829,6 +3160,62 @@ function App() {
 					</div>
 				)}
 			</footer>
+			{authorOpen && (
+				<div className="clone-dialog-overlay">
+					<section
+						className="clone-dialog"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="author-dialog-title"
+					>
+						<h2 id="author-dialog-title">
+							Repository Author Settings
+						</h2>
+						<p className="placeholder">
+							These settings apply only to this repository. Leave
+							either field empty to remove its local override;
+							global Git settings will apply if configured.
+						</p>
+						<label htmlFor="author-name">Commit author name</label>
+						<input
+							id="author-name"
+							value={authorName}
+							onChange={(event) =>
+								setAuthorName(event.target.value)
+							}
+							disabled={authorBusy}
+						/>
+						<label htmlFor="author-email">
+							Commit author email
+						</label>
+						<input
+							id="author-email"
+							value={authorEmail}
+							onChange={(event) =>
+								setAuthorEmail(event.target.value)
+							}
+							disabled={authorBusy}
+						/>
+						<div className="clone-dialog-actions">
+							<button
+								type="button"
+								onClick={() => setAuthorOpen(false)}
+								disabled={authorBusy}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="button-primary"
+								onClick={saveAuthorSettings}
+								disabled={authorBusy}
+							>
+								{authorBusy ? "Saving..." : "Save"}
+							</button>
+						</div>
+					</section>
+				</div>
+			)}
 			{cloneDialogOpen && (
 				<div className="clone-dialog-overlay">
 					<section

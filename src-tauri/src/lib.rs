@@ -32,6 +32,11 @@ fn get_repository_root(repo_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_upstream_status(repo_path: String) -> Result<String, String> {
+    // An initialized repository has a branch name but no HEAD commit yet.
+    if run_git(&repo_path, &["rev-parse", "--verify", "HEAD"]).is_err() {
+        return Ok(String::new());
+    }
+
     let upstream = run_git(
         &repo_path,
         &[
@@ -1033,6 +1038,12 @@ fn resolve_conflict_incoming(repo_path: String, file_path: String) -> Result<(),
 
 #[tauri::command]
 fn get_commit_history(repo_path: String) -> Result<String, String> {
+    // A repository created by `git init` has no HEAD commit yet. Its history
+    // is empty, not an error, so it can be opened immediately in GitPilot.
+    if run_git(&repo_path, &["rev-parse", "--verify", "HEAD"]).is_err() {
+        return Ok(String::new());
+    }
+
     let output = Command::new("git")
         .arg("-C")
         .arg(&repo_path)
@@ -1122,7 +1133,14 @@ fn get_working_file_diff(
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let result = String::from_utf8_lossy(&output.stdout).to_string();
+    if result
+        .lines()
+        .any(|line| line.starts_with("Binary files ") || line.starts_with("GIT binary patch"))
+    {
+        return Ok("Binary file changed — no line-by-line text differences are available.".into());
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1165,9 +1183,23 @@ fn get_untracked_file_content(repo_path: String, file_path: String) -> Result<St
         return Err("File is not an untracked Git file.".to_string());
     }
 
-    let content = fs::read_to_string(&full_path).map_err(|error| error.to_string())?;
-
-    Ok(content)
+    // Avoid trying to display arbitrarily large untracked files in the UI.
+    const PREVIEW_LIMIT: u64 = 1024 * 1024;
+    if fs::metadata(&full_path)
+        .map_err(|error| error.to_string())?
+        .len()
+        > PREVIEW_LIMIT
+    {
+        return Ok("File exceeds the 1 MiB text-preview limit.".into());
+    }
+    let bytes = fs::read(&full_path).map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > PREVIEW_LIMIT {
+        return Ok("File exceeds the 1 MiB text-preview limit.".into());
+    }
+    if bytes.contains(&0) || std::str::from_utf8(&bytes).is_err() {
+        return Ok("Binary file — no text preview available.".into());
+    }
+    Ok(String::from_utf8(bytes).expect("validated UTF-8"))
 }
 
 #[tauri::command]
@@ -1203,15 +1235,30 @@ fn stage_all(repo_path: String) -> Result<(), String> {
     Ok(())
 }
 
+// In an unborn repository HEAD does not resolve, so `git restore --staged`
+// cannot use it as the source. Removing entries from the index instead
+// preserves the working-tree files and makes them untracked again.
+fn has_head_commit(repo_path: &str) -> bool {
+    run_git(repo_path, &["rev-parse", "--verify", "HEAD"]).is_ok()
+}
+
 #[tauri::command]
 fn unstage_all(repo_path: String) -> Result<(), String> {
-    run_git(&repo_path, &["restore", "--staged", "--", "."])?;
+    if has_head_commit(&repo_path) {
+        run_git(&repo_path, &["restore", "--staged", "--", "."])?;
+    } else {
+        run_git(&repo_path, &["rm", "-r", "--cached", "--", "."])?;
+    }
     Ok(())
 }
 
 #[tauri::command]
 fn unstage_file(repo_path: String, file_path: String) -> Result<(), String> {
-    run_git(&repo_path, &["restore", "--staged", "--", &file_path])?;
+    if has_head_commit(&repo_path) {
+        run_git(&repo_path, &["restore", "--staged", "--", &file_path])?;
+    } else {
+        run_git(&repo_path, &["rm", "--cached", "--", &file_path])?;
+    }
     Ok(())
 }
 
@@ -1262,7 +1309,17 @@ fn get_file_diff(
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let result = String::from_utf8_lossy(&output.stdout).to_string();
+    if result
+        .lines()
+        .any(|line| line.starts_with("Binary files ") || line.starts_with("GIT binary patch"))
+    {
+        return Ok(
+            "Binary file changed in this commit — no line-by-line text differences are available."
+                .into(),
+        );
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1273,11 +1330,169 @@ fn create_commit(repo_path: String, message: String) -> Result<String, String> {
     run_git(&repo_path, &["commit", "-m", &message])
 }
 
+// Phase 4: local repository operations. No new dependencies or shell commands.
+// Git receives each argument separately, so filenames are never shell-expanded.
+#[tauri::command]
+fn initialize_repository(folder_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    let folder = Path::new(folder_path.trim())
+        .canonicalize()
+        .map_err(|error| format!("Choose an existing folder: {error}"))?;
+    if !folder.is_dir() {
+        return Err("Choose an existing folder, not a file.".into());
+    }
+    if folder.join(".git").exists() {
+        return Err("This folder already contains a Git repository.".into());
+    }
+
+    let path = folder.to_string_lossy().to_string();
+    // Do not create a second repository inside a checked-out repository.
+    if run_git(&path, &["rev-parse", "--show-toplevel"]).is_ok() {
+        return Err("This folder is already inside a Git repository.".into());
+    }
+    run_git(&path, &["init", "--", "."])?;
+    Ok(path)
+}
+
+fn require_no_merge(repo_path: &str) -> Result<(), String> {
+    let merge_head = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if merge_head.status.success() {
+        return Err("Finish or abort the current merge first.".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_stashes(repo_path: String) -> Result<Vec<String>, String> {
+    let output = run_git(&repo_path, &["stash", "list", "--format=%gd | %s"])?;
+    Ok(output.lines().map(str::to_string).collect())
+}
+
+#[tauri::command]
+fn stash_changes(repo_path: String) -> Result<String, String> {
+    require_no_merge(&repo_path)?;
+    run_git(&repo_path, &["rev-parse", "--verify", "HEAD"])
+        .map_err(|_| "Create the first commit before using Stash.".to_string())?;
+    if run_git(&repo_path, &["status", "--porcelain"])?.is_empty() {
+        return Err("There are no changes to stash.".into());
+    }
+    // Untracked files are included; ignored files are deliberately excluded.
+    let result = run_git(
+        &repo_path,
+        &[
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "Saved by GitPilot",
+        ],
+    )?;
+    if result.contains("No local changes to save") {
+        return Err("No stashable changes found.".into());
+    }
+    Ok("Changes saved, including untracked files. Ignored files were not included.".into())
+}
+
+#[tauri::command]
+fn apply_stash(repo_path: String) -> Result<String, String> {
+    require_no_merge(&repo_path)?;
+    if !run_git(&repo_path, &["status", "--porcelain"])?.is_empty() {
+        return Err("Commit or stash existing working changes before applying a stash.".into());
+    }
+    let stash_refs = run_git(&repo_path, &["stash", "list", "--format=%gd"])?;
+    if stash_refs.lines().next().is_none() {
+        return Err("There is no saved stash to apply.".into());
+    }
+    // Restore both staged and unstaged content. Do not pop: retain a backup.
+    run_git(&repo_path, &["stash", "apply", "--index", "stash@{0}"])?;
+    Ok("Latest stash applied. Its saved backup was kept.".into())
+}
+
+#[tauri::command]
+fn discard_unstaged_file(repo_path: String, file_path: String) -> Result<String, String> {
+    require_no_merge(&repo_path)?;
+    if file_path.is_empty() {
+        return Err("Choose a tracked file.".into());
+    }
+    let changes = run_git(&repo_path, &["status", "--porcelain", "--", &file_path])?;
+    if changes.is_empty() {
+        return Err("No changes found for this file.".into());
+    }
+    if changes.lines().any(|line| line.starts_with("??")) {
+        return Err("Untracked files cannot be discarded from GitPilot.".into());
+    }
+    if changes.lines().any(|line| {
+        let code = line.get(..2).unwrap_or("");
+        ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].contains(&code)
+    }) {
+        return Err("Resolve or abort the conflict first.".into());
+    }
+    // A staged-only file has no unstaged content to discard.
+    let unstaged = run_git(&repo_path, &["diff", "--name-only", "--", &file_path])?;
+    if unstaged.is_empty() {
+        return Err("There are no unstaged changes to discard.".into());
+    }
+    // --worktree does not change the staging area or saved commits.
+    run_git(&repo_path, &["restore", "--worktree", "--", &file_path])?;
+    Ok(format!(
+        "Discarded unstaged changes in '{file_path}'. Staged changes were preserved."
+    ))
+}
+
+#[tauri::command]
+fn get_author_settings(repo_path: String) -> Result<Vec<String>, String> {
+    // Only local overrides: never modify the user's global Git configuration.
+    run_git(&repo_path, &["rev-parse", "--git-dir"])?;
+    let name =
+        run_git(&repo_path, &["config", "--local", "--get", "user.name"]).unwrap_or_default();
+    let email =
+        run_git(&repo_path, &["config", "--local", "--get", "user.email"]).unwrap_or_default();
+    Ok(vec![name, email])
+}
+
+#[tauri::command]
+fn save_author_settings(repo_path: String, name: String, email: String) -> Result<String, String> {
+    let name = name.trim();
+    let email = email.trim();
+    if name.contains('\n') || name.contains('\r') || email.contains('\n') || email.contains('\r') {
+        return Err("Name and email must not contain line breaks.".into());
+    }
+    run_git(&repo_path, &["rev-parse", "--git-dir"])?;
+    // Blank fields remove only the repository-specific override. Git then
+    // falls back to the user's global configuration, if any.
+    for (key, value) in [("user.name", name), ("user.email", email)] {
+        if value.is_empty() {
+            if run_git(&repo_path, &["config", "--local", "--get", key]).is_ok() {
+                run_git(&repo_path, &["config", "--local", "--unset-all", key])?;
+            }
+        } else {
+            run_git(
+                &repo_path,
+                &["config", "--local", "--replace-all", key, value],
+            )?;
+        }
+    }
+    Ok("Repository-local author settings updated. Global Git settings were not changed.".into())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            initialize_repository,
+            get_stashes,
+            stash_changes,
+            apply_stash,
+            discard_unstaged_file,
+            get_author_settings,
+            save_author_settings,
             create_github_repository,
             get_upstream_status,
             set_upstream,
