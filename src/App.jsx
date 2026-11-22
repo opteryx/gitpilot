@@ -146,6 +146,8 @@ function App() {
 	const [fetchingRemote, setFetchingRemote] = useState("");
 	const [pushingBranch, setPushingBranch] = useState(false);
 	const [pullingBranch, setPullingBranch] = useState(false);
+	const [pullMode, setPullMode] = useState("ff-only");
+	const [rebaseInProgress, setRebaseInProgress] = useState(false);
 	const [newBranchName, setNewBranchName] = useState("");
 	const [branchCreating, setBranchCreating] = useState(false);
 	const [branchBusy, setBranchBusy] = useState(false);
@@ -211,6 +213,7 @@ function App() {
 		!branchBusy &&
 		!commitLoading &&
 		!mergeInProgress &&
+		!rebaseInProgress &&
 		!stashBusy &&
 		!discardBusy &&
 		!initLoading;
@@ -267,8 +270,12 @@ function App() {
 				repoPath: path,
 			});
 
+			const rebaseActive = await invoke("get_rebase_status", {
+				repoPath: path,
+			});
 			setMergeInProgress(inProgress);
-			return inProgress;
+			setRebaseInProgress(rebaseActive);
+			return inProgress || rebaseActive;
 		} catch (err) {
 			setError(String(err));
 		}
@@ -292,7 +299,8 @@ function App() {
 			upstreamLoading ||
 			repoLoading ||
 			branchBusy ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		) {
 			return;
 		}
@@ -336,6 +344,7 @@ function App() {
 			repoLoading ||
 			branchBusy ||
 			mergeInProgress ||
+			rebaseInProgress ||
 			Boolean(fetchingRemote) ||
 			pushingBranch ||
 			pullingBranch
@@ -442,34 +451,111 @@ function App() {
 			fetchingRemote ||
 			repoLoading ||
 			branchBusy ||
-			mergeInProgress
-		) {
-			return;
-		}
+			mergeInProgress ||
+			rebaseInProgress
+		) return;
 
 		const path = repoPath;
 		const requestId = repoRequestId.current;
+		const selectedMode = pullMode;
+		const trackingBranch = upstreamStatus.split("|")[0];
+
+		if (selectedMode !== "ff-only") {
+			const details = selectedMode === "rebase"
+				? "Rebase replays your local commits above the remote commits. Local commit IDs can change. Do not rebase shared commits that others are using."
+				: "Merge combines local and remote histories, creating a merge commit if they diverged. Conflicts may need manual resolution.";
+			const confirmed = await ask(
+				`Pull using ${selectedMode === "rebase" ? "Rebase" : "Merge"}?\n\n` +
+					`Local branch: ${branch}\nUpstream: ${trackingBranch}\n\n` +
+					details + "\n\nA clean working directory is required.",
+				{
+					title: "Confirm Pull Strategy",
+					kind: "warning",
+					okLabel: selectedMode === "rebase" ? "Rebase" : "Merge",
+					cancelLabel: "Cancel",
+				},
+			);
+			if (!confirmed) {
+				setPullMode("ff-only");
+				return;
+			}
+		}
 
 		setPullingBranch(true);
 		setError("");
 		setOperationStatus("");
-
 		try {
 			const message = await invoke("pull_current_branch", {
 				repoPath: path,
+				pullMode: selectedMode,
 			});
-
 			if (requestId !== repoRequestId.current) return;
-
 			await refreshRepository();
-
 			setOperationStatus(message);
 		} catch (err) {
 			if (requestId === repoRequestId.current) {
+				// An unsuccessful merge/rebase may leave recoverable conflicts.
+				await refreshRepository();
 				setError(String(err));
 			}
 		} finally {
 			setPullingBranch(false);
+			setPullMode("ff-only");
+		}
+	}
+
+	async function handleRebaseAction(action) {
+		if (!repoPath || !rebaseInProgress || branchBusy || pullingBranch) return;
+		if (action === "continue" && workingChanges.some(isConflicted)) {
+			setError("Resolve and stage all conflicted files before continuing the rebase.");
+			return;
+		}
+		if (action === "abort") {
+			const confirmed = await ask(
+				"Abort the rebase and restore the original local commits? Any conflict resolutions made during this rebase will be lost.",
+				{ title: "Abort Rebase", kind: "warning", okLabel: "Abort Rebase", cancelLabel: "Cancel" },
+			);
+			if (!confirmed) return;
+		}
+		const path = repoPath;
+		const requestId = repoRequestId.current;
+		setBranchBusy(true);
+		setError("");
+		try {
+			const result = await invoke(action === "abort" ? "abort_rebase" : "continue_rebase", { repoPath: path });
+			if (requestId !== repoRequestId.current) return;
+			clearSelection();
+			await refreshRepository(true);
+			setOperationStatus(result);
+		} catch (err) {
+			if (requestId === repoRequestId.current) {
+				await refreshRepository(true);
+				setError(String(err));
+			}
+		} finally {
+			setBranchBusy(false);
+		}
+	}
+
+	async function markConflictResolved(file) {
+		if (!repoPath || !rebaseInProgress || !isConflicted(file)) return;
+		const confirmed = await ask(
+			`Mark your edited version of "${file.path}" as resolved?\n\nMake sure you have removed conflict markers and saved the intended content before staging it.`,
+			{ title: "Mark Rebase Conflict Resolved", kind: "warning", okLabel: "Stage Resolved File", cancelLabel: "Cancel" },
+		);
+		if (!confirmed) return;
+		try {
+			await invoke("stage_file", { repoPath, filePath: file.path });
+			const changes = await refreshWorkingChanges();
+			const updated = changes?.find((item) => item.path === file.path);
+			if (updated) {
+				setSelectedWorkingFile(updated);
+				await refreshWorkingFileDiff(updated, "staged");
+				setWorkingDiffMode("staged");
+			} else clearSelection();
+			setOperationStatus(`Marked '${file.path}' resolved. Continue Rebase when all conflicts are staged.`);
+		} catch (err) {
+			setError(String(err));
 		}
 	}
 
@@ -479,7 +565,8 @@ function App() {
 			branchName === branch ||
 			repoLoading ||
 			branchBusy ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		)
 			return;
 
@@ -568,7 +655,8 @@ function App() {
 			branchName === branch ||
 			repoLoading ||
 			branchBusy ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		)
 			return;
 
@@ -615,7 +703,8 @@ function App() {
 			branchCreating ||
 			repoLoading ||
 			branchBusy ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		)
 			return;
 
@@ -652,6 +741,7 @@ function App() {
 			!repoPath ||
 			branchName === branch ||
 			mergeInProgress ||
+			rebaseInProgress ||
 			(branchBusy && !fromCreate)
 		)
 			return;
@@ -673,6 +763,7 @@ function App() {
 			const parsedCommits = await fetchCommitHistory(repoPath);
 
 			setBranch(currentBranch);
+			setPullMode("ff-only");
 			setCommits(parsedCommits);
 			clearSelection();
 			await refreshWorkingChanges();
@@ -685,13 +776,13 @@ function App() {
 		}
 	}
 
-	async function refreshRepository() {
+	async function refreshRepository(allowBusy = false) {
 		if (
 			!repoPath ||
 			repoLoading ||
 			pushingBranch ||
 			fetchingRemote ||
-			branchBusy
+			(branchBusy && allowBusy !== true)
 		) {
 			return;
 		}
@@ -1053,6 +1144,8 @@ function App() {
 			workingChangesRequestId.current += 1;
 			setWorkingChanges([]);
 			setMergeInProgress(false);
+			setRebaseInProgress(false);
+			setPullMode("ff-only");
 
 			await Promise.all([
 				refreshWorkingChanges(rootPath),
@@ -1251,10 +1344,12 @@ function App() {
 		if (!repoPath || !file || !isConflicted(file)) return;
 
 		const confirmed = await ask(
-			`Keep the current branch version of "${file.path}"?\n\n` +
-				"This will discard the incoming version for this conflicted file and mark the conflict as resolved.",
+			(rebaseInProgress
+				? `Keep the upstream version of "${file.path}"?\n\nThis discards the replayed local commit's version of this file.`
+				: `Keep the current branch version of "${file.path}"?\n\nThis discards the incoming version of this file.`) +
+				" The selected version replaces the entire file and will be staged.",
 			{
-				title: "Keep Current Version",
+				title: rebaseInProgress ? "Keep Upstream Version" : "Keep Current Version",
 				kind: "warning",
 				okLabel: "Keep Current",
 				cancelLabel: "Cancel",
@@ -1296,12 +1391,14 @@ function App() {
 		if (!repoPath || !file || !isConflicted(file)) return;
 
 		const confirmed = await ask(
-			`Keep the incoming branch version of "${file.path}"?\n\n` +
-				"This will discard the current branch version for this conflicted file and mark the conflict as resolved.",
+			(rebaseInProgress
+				? `Keep the replayed local commit's version of "${file.path}"?\n\nThis discards the upstream version of this file.`
+				: `Keep the incoming branch version of "${file.path}"?\n\nThis discards the current branch version of this file.`) +
+				" The selected version replaces the entire file and will be staged.",
 			{
-				title: "Keep Incoming Version",
+				title: rebaseInProgress ? "Keep Local Commit" : "Keep Incoming Version",
 				kind: "warning",
-				okLabel: "Keep Incoming",
+				okLabel: rebaseInProgress ? "Keep Local Commit" : "Keep Incoming",
 				cancelLabel: "Cancel",
 			},
 		);
@@ -1375,7 +1472,7 @@ function App() {
 	}
 
 	async function createCommit() {
-		if (!repoPath || !commitMessage.trim() || commitLoading) return;
+		if (!repoPath || !commitMessage.trim() || commitLoading || rebaseInProgress) return;
 
 		if (workingChanges.some(isConflicted)) {
 			setError("Resolve all merge conflicts before creating a commit.");
@@ -1639,7 +1736,8 @@ function App() {
 			stashBusy ||
 			discardBusy ||
 			repoLoading ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		)
 			return;
 		const confirmed = await ask(
@@ -1679,7 +1777,8 @@ function App() {
 			discardBusy ||
 			repoLoading ||
 			!stashEntries.length ||
-			mergeInProgress
+			mergeInProgress ||
+			rebaseInProgress
 		)
 			return;
 		const confirmed = await ask(
@@ -1907,8 +2006,7 @@ function App() {
 								repoLoading ||
 								pushingBranch ||
 								Boolean(fetchingRemote) ||
-								branchBusy ||
-								mergeInProgress
+								branchBusy
 							}
 							title={
 								"Reload local repository status, branches, commits, and tracking information without contacting GitHub.\n" +
@@ -1939,6 +2037,17 @@ function App() {
 								>
 									Abort Merge
 								</button>
+							</div>
+						)}
+
+						{rebaseInProgress && (
+							<div className="merge-warning" role="status">
+								<strong>Rebase in Progress</strong>
+								<p>Resolve and stage each conflicted file. During a rebase, "ours" is upstream and "theirs" is the local commit being replayed. Continue may pause again if a later commit conflicts.</p>
+								<button type="button" onClick={() => handleRebaseAction("continue")} disabled={branchBusy || pullingBranch || workingChanges.some(isConflicted)} title="Continue replaying local commits after resolving and staging conflicts. Git: git rebase --continue">
+									{branchBusy ? "Working..." : "Continue Rebase"}
+								</button>
+								<button type="button" className="button-danger" onClick={() => handleRebaseAction("abort")} disabled={branchBusy || pullingBranch} title="Return to the state before rebasing. Git: git rebase --abort">Abort Rebase</button>
 							</div>
 						)}
 
@@ -1981,8 +2090,7 @@ function App() {
 											<p>
 												<strong>Pull:</strong> Download
 												remote changes and update your
-												current branch. GitPilot only
-												allows fast-forward pulls.
+												current branch. Fast-forward Only is the default; Merge and Rebase are optional.
 											</p>
 
 											<p>
@@ -1999,6 +2107,22 @@ function App() {
 											</p>
 										</div>
 									)}
+								</div>
+
+								<div style={{ marginBottom: "12px", fontSize: "12px" }}>
+									<label htmlFor="pull-strategy" style={{ display: "block", fontWeight: 600, marginBottom: "4px" }}>Pull Strategy</label>
+									<select id="pull-strategy" value={pullMode} onChange={(event) => setPullMode(event.target.value)} disabled={pullingBranch || repoLoading || mergeInProgress || rebaseInProgress} style={{ width: "100%", padding: "6px", border: "1px solid #8293a6", borderRadius: "4px" }} title="Select how Pull integrates diverged histories. Fast-forward Only never changes existing local commits.">
+										<option value="ff-only">Fast-forward Only (default)</option>
+										<option value="merge">Merge</option>
+										<option value="rebase">Rebase</option>
+									</select>
+									<p className="phase4-hint" style={{ margin: "6px 0 0" }}>
+										{pullMode === "rebase"
+											? "Replays local commits onto upstream; commit IDs may change."
+											: pullMode === "merge"
+												? "Combines diverged histories with a merge commit."
+												: "Only updates when the branch can fast-forward."}
+									</p>
 								</div>
 
 								<button
@@ -2111,7 +2235,8 @@ function App() {
 																pushingBranch ||
 																repoLoading ||
 																branchBusy ||
-																mergeInProgress
+																mergeInProgress ||
+																rebaseInProgress
 															}
 														>
 															{fetchingRemote ===
@@ -2135,7 +2260,8 @@ function App() {
 																!upstreamStatus ||
 																repoLoading ||
 																branchBusy ||
-																mergeInProgress
+																mergeInProgress ||
+																rebaseInProgress
 															}
 															title={
 																"Upload new local commits to the configured remote branch.\n" +
@@ -2162,11 +2288,12 @@ function App() {
 																) ||
 																repoLoading ||
 																branchBusy ||
-																mergeInProgress
+																mergeInProgress ||
+																rebaseInProgress
 															}
 															title={
-																"Fetch remote changes and update the current branch only if a fast-forward is possible.\n" +
-																"Git: git fetch <remote> && git merge --ff-only @{upstream}"
+																`Fetch and integrate the current branch using ${pullMode}.\n` +
+																(pullMode === "rebase" ? "Git: git rebase @{upstream}" : pullMode === "merge" ? "Git: git merge --no-edit @{upstream}" : "Git: git merge --ff-only @{upstream}")
 															}
 														>
 															{pullingBranch
@@ -2234,6 +2361,8 @@ function App() {
 
 						{branch ? (
 							<p className="branch-name">{branch}</p>
+						) : rebaseInProgress ? (
+							<p className="branch-name">Rebasing (detached HEAD)</p>
 						) : (
 							<p className="placeholder">
 								No repository selected
@@ -2278,7 +2407,8 @@ function App() {
 									Boolean(fetchingRemote) ||
 									pushingBranch ||
 									pullingBranch ||
-									mergeInProgress
+									mergeInProgress ||
+									rebaseInProgress
 								}
 								title={
 									"Choose which remote branch the current local branch tracks.\n" +
@@ -2318,7 +2448,8 @@ function App() {
 									Boolean(fetchingRemote) ||
 									pushingBranch ||
 									pullingBranch ||
-									mergeInProgress
+									mergeInProgress ||
+									rebaseInProgress
 								}
 								title={
 									"Upload this branch for the first time and configure upstream tracking.\n" +
@@ -2356,6 +2487,7 @@ function App() {
 												repoLoading ||
 												branchBusy ||
 												mergeInProgress ||
+												rebaseInProgress ||
 												branchName === branch
 											}
 											aria-current={
@@ -2379,7 +2511,8 @@ function App() {
 													disabled={
 														repoLoading ||
 														branchBusy ||
-														mergeInProgress
+														mergeInProgress ||
+														rebaseInProgress
 													}
 													title={
 														`Merge branch "${branchName}" INTO the current branch "${branch}".\n` +
@@ -2398,7 +2531,8 @@ function App() {
 													disabled={
 														repoLoading ||
 														branchBusy ||
-														mergeInProgress
+														mergeInProgress ||
+														rebaseInProgress
 													}
 													title={
 														`Delete local branch "${branchName}" if its changes have been merged.\n` +
@@ -2424,7 +2558,8 @@ function App() {
 											branchCreating ||
 											repoLoading ||
 											branchBusy ||
-											mergeInProgress
+											mergeInProgress ||
+											rebaseInProgress
 										}
 										aria-label="New branch name"
 									/>
@@ -2441,7 +2576,8 @@ function App() {
 											disabled={
 												branchCreating ||
 												repoLoading ||
-												mergeInProgress
+												mergeInProgress ||
+												rebaseInProgress
 											}
 										/>
 										Switch to new branch
@@ -2462,7 +2598,8 @@ function App() {
 											branchCreating ||
 											repoLoading ||
 											branchBusy ||
-											mergeInProgress
+											mergeInProgress ||
+											rebaseInProgress
 										}
 									>
 										{branchCreating
@@ -2484,6 +2621,7 @@ function App() {
 										repoLoading ||
 										branchBusy ||
 										mergeInProgress ||
+										rebaseInProgress ||
 										workingChanges.length === 0
 									}
 									title="Save staged, unstaged and untracked changes temporarily. Git: git stash push -u"
@@ -2499,6 +2637,7 @@ function App() {
 										repoLoading ||
 										branchBusy ||
 										mergeInProgress ||
+										rebaseInProgress ||
 										stashEntries.length === 0 ||
 										workingChanges.length !== 0
 									}
@@ -2876,6 +3015,7 @@ function App() {
 									!repoPath ||
 									!commitMessage.trim() ||
 									commitLoading ||
+									rebaseInProgress ||
 									workingChanges.some(isConflicted) ||
 									(!mergeInProgress &&
 										!workingChanges.some(
@@ -2911,13 +3051,12 @@ function App() {
 
 								{isConflicted(selectedWorkingFile) && (
 									<div className="conflict-resolution">
-										<h3>Resolve Merge Conflict</h3>
+										<h3>{rebaseInProgress ? "Resolve Rebase Conflict" : "Resolve Merge Conflict"}</h3>
 
 										<p>
-											Choose which version of this file to
-											keep. The selected version will
-											replace the entire file and be
-											staged automatically.
+											{rebaseInProgress
+												? 'During rebase, "Keep Upstream" uses Git ours and "Keep Local Commit" uses Git theirs. Each choice replaces the entire file. Alternatively, edit the file yourself and stage the resolved version.'
+												: 'Choose which version of this file to keep. The chosen version replaces the entire file and is staged automatically.'}
 										</p>
 
 										<div className="conflict-resolution-actions">
@@ -2930,7 +3069,7 @@ function App() {
 													)
 												}
 											>
-												Keep Current
+												{rebaseInProgress ? "Keep Upstream" : "Keep Current"}
 											</button>
 
 											<button
@@ -2942,8 +3081,18 @@ function App() {
 													)
 												}
 											>
-												Keep Incoming
+												{rebaseInProgress ? "Keep Local Commit" : "Keep Incoming"}
 											</button>
+											{rebaseInProgress && (
+												<button
+													type="button"
+													className="button-secondary"
+													onClick={() => markConflictResolved(selectedWorkingFile)}
+													title="Stage your manually resolved version after removing conflict markers. Git: git add"
+												>
+													Use Edited File
+												</button>
+											)}
 										</div>
 									</div>
 								)}

@@ -32,6 +32,11 @@ fn get_repository_root(repo_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_upstream_status(repo_path: String) -> Result<String, String> {
+    // During a rebase HEAD is detached, so no current-branch upstream exists.
+    // Return an empty tracking display rather than breaking repository refresh.
+    if run_git(&repo_path, &["symbolic-ref", "-q", "HEAD"]).is_err() {
+        return Ok(String::new());
+    }
     // An initialized repository has a branch name but no HEAD commit yet.
     if run_git(&repo_path, &["rev-parse", "--verify", "HEAD"]).is_err() {
         return Ok(String::new());
@@ -474,8 +479,94 @@ async fn publish_branch(repo_path: String, remote_name: String) -> Result<String
     .map_err(|error| error.to_string())?
 }
 
-// Check whether the repository is ready for a fast-forward-only pull.
+// Find the Git directory even for linked worktrees, whose .git is a file.
+fn rebase_in_progress(repo_path: &str) -> Result<bool, String> {
+    let git_dir = run_git(repo_path, &["rev-parse", "--absolute-git-dir"])?;
+    let git_dir = std::path::Path::new(&git_dir);
+    Ok(git_dir.join("rebase-merge").is_dir() || git_dir.join("rebase-apply").is_dir())
+}
+
+#[tauri::command]
+fn get_rebase_status(repo_path: String) -> Result<bool, String> {
+    rebase_in_progress(&repo_path)
+}
+
+// Git rebase may otherwise launch an editor and hang the desktop app. Keep
+// existing commit messages; do not ask for a new message interactively.
+fn run_rebase_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .env("GIT_EDITOR", "true")
+        .env("GIT_SEQUENCE_EDITOR", "true")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_ASKPASS", "false")
+        .env("SSH_ASKPASS", "false")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Unable to run Git rebase: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("Git rebase exited with status {}", output.status)
+        } else {
+            stderr
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+async fn continue_rebase(repo_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !rebase_in_progress(&repo_path)? {
+            return Err("No rebase is in progress.".to_string());
+        }
+        if !run_git(&repo_path, &["ls-files", "-u"])?.is_empty() {
+            return Err("Resolve and stage every conflicted file before continuing the rebase.".into());
+        }
+        match run_rebase_git(&repo_path, &["rebase", "--continue"]) {
+            Ok(_) => {
+                if rebase_in_progress(&repo_path)? {
+                    Ok("Rebase advanced. Resolve any remaining conflicts, then Continue Rebase again.".into())
+                } else {
+                    Ok("Rebase completed successfully. Review the new commit history before pushing.".into())
+                }
+            }
+            Err(error) => {
+                if rebase_in_progress(&repo_path)? {
+                    Err(format!(
+                        "Rebase is still in progress. Resolve and stage remaining conflicts, or Abort Rebase. Git details: {error}"
+                    ))
+                } else {
+                    Err(format!("Unable to continue rebase: {error}"))
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn abort_rebase(repo_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !rebase_in_progress(&repo_path)? {
+            return Err("No rebase is in progress.".to_string());
+        }
+        run_rebase_git(&repo_path, &["rebase", "--abort"])?;
+        Ok("Rebase aborted; the original branch and commits were restored.".into())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+// Check whether the repository is ready for any pull strategy.
 fn check_pull_safety(repo_path: &str) -> Result<(), String> {
+    if rebase_in_progress(repo_path)? {
+        return Err("Cannot pull during a rebase. Continue or abort the rebase first.".into());
+    }
     // Refuse to pull while a merge is in progress.
     let merge_head = Command::new("git")
         .arg("-C")
@@ -491,6 +582,12 @@ fn check_pull_safety(repo_path: &str) -> Result<(), String> {
         );
     }
 
+    for reference in ["CHERRY_PICK_HEAD", "REVERT_HEAD"] {
+        if run_git(repo_path, &["rev-parse", "-q", "--verify", reference]).is_ok() {
+            return Err("Finish or abort the current cherry-pick/revert before pulling.".into());
+        }
+    }
+
     // Require a clean working directory and staging area.
     let changes = run_git(repo_path, &["status", "--porcelain"])?;
 
@@ -504,93 +601,113 @@ fn check_pull_safety(repo_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+// An explicit strategy is required from the front end; fast-forward only
+// remains the default. Fetch is always performed first via the tested HTTPS/SSH
+// implementation, then the local update is run on a background worker.
 #[tauri::command]
-async fn pull_current_branch(repo_path: String) -> Result<String, String> {
-    // Check repository safety and identify the upstream remote.
+async fn pull_current_branch(repo_path: String, pull_mode: String) -> Result<String, String> {
+    if !["ff-only", "merge", "rebase"].contains(&pull_mode.as_str()) {
+        return Err("Invalid Pull strategy. Choose Fast-forward Only, Merge or Rebase.".into());
+    }
     let check_path = repo_path.clone();
-
-    let (branch, remote) = tauri::async_runtime::spawn_blocking(move || {
+    let (branch, remote, upstream) = tauri::async_runtime::spawn_blocking(move || {
         check_pull_safety(&check_path)?;
-
         let branch = run_git(&check_path, &["branch", "--show-current"])?;
-
         if branch.is_empty() {
             return Err("Cannot pull: HEAD is detached.".to_string());
         }
-
         let upstream = run_git(
             &check_path,
-            &[
-                "rev-parse",
-                "--abbrev-ref",
-                "--symbolic-full-name",
-                "@{upstream}",
-            ],
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
         )
         .map_err(|_| "Cannot pull: this branch has no upstream configured.".to_string())?;
-
-        let (remote, _) = upstream
-            .split_once('/')
-            .ok_or_else(|| format!("Cannot identify the remote for upstream '{upstream}'."))?;
-
-        Ok::<(String, String), String>((branch, remote.to_string()))
+        let (remote, _) = upstream.split_once('/')
+            .ok_or_else(|| format!("Cannot identify remote for '{upstream}'."))?;
+        Ok::<(String, String, String), String>((branch, remote.to_string(), upstream))
     })
     .await
     .map_err(|error| error.to_string())??;
 
-    // Use our existing Fetch command, including its authentication
-    // safeguards and 45-second timeout.
+    // Reuse credential helpers, timeouts, and safeguards of Fetch.
     fetch_remote(repo_path.clone(), remote).await?;
 
-    // Compare local and upstream commits after fetching. Only advance the
-    // current branch when the update is a true fast-forward.
     tauri::async_runtime::spawn_blocking(move || {
         check_pull_safety(&repo_path)?;
-
-        // The two numbers are commits unique to HEAD (ahead) and to the
-        // upstream branch (behind), respectively.
+        if run_git(&repo_path, &["branch", "--show-current"])? != branch {
+            return Err("The checked-out branch changed during Fetch. Pull was canceled.".into());
+        }
+        let current_upstream = run_git(
+            &repo_path,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        )?;
+        if current_upstream != upstream {
+            return Err("The upstream branch changed during Fetch. Pull was canceled.".into());
+        }
         let counts = run_git(
             &repo_path,
             &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
         )?;
-
         let mut parts = counts.split_whitespace();
-        let ahead = parts
-            .next()
-            .and_then(|value| value.parse::<u64>().ok())
-            .ok_or_else(|| format!("Unable to read local commit count: '{counts}'."))?;
-        let behind = parts
-            .next()
-            .and_then(|value| value.parse::<u64>().ok())
-            .ok_or_else(|| format!("Unable to read upstream commit count: '{counts}'."))?;
-
+        let ahead = parts.next().and_then(|v| v.parse::<u64>().ok())
+            .ok_or_else(|| format!("Invalid ahead count: '{counts}'."))?;
+        let behind = parts.next().and_then(|v| v.parse::<u64>().ok())
+            .ok_or_else(|| format!("Invalid behind count: '{counts}'."))?;
         if parts.next().is_some() {
-            return Err(format!("Unexpected commit counts returned by Git: '{counts}'."));
+            return Err(format!("Unexpected Git ahead/behind counts: '{counts}'."));
         }
 
         if behind == 0 {
             return Ok(if ahead == 0 {
                 format!("Already up to date. Branch '{branch}' matches its upstream.")
             } else {
-                format!(
-                    "No remote commits to pull. Branch '{branch}' is ahead by {ahead} local commit(s)."
-                )
+                format!("No remote commits to pull. Branch '{branch}' is ahead by {ahead} local commit(s).")
             });
         }
 
-        if ahead > 0 {
-            return Err(format!(
-                "Cannot fast-forward branch '{branch}': local and upstream histories have diverged \
-                 ({ahead} local and {behind} remote-only commit(s)). No changes were applied."
+        // When the history can fast-forward, use that safe operation for all
+        // strategies. Do not create an unnecessary merge or rebase.
+        if ahead == 0 {
+            run_git(&repo_path, &["merge", "--ff-only", "@{upstream}"])
+                .map_err(|error| format!("Could not fast-forward '{branch}': {error}"))?;
+            return Ok(format!(
+                "Fast-forward successful. Updated branch '{branch}' with {behind} remote commit(s)."
             ));
         }
 
-        run_git(&repo_path, &["merge", "--ff-only", "@{upstream}"])
-            .map_err(|error| format!("Could not fast-forward branch '{branch}': {error}"))?;
-
-        Ok(format!(
-            "Fast-forward successful. Updated branch '{branch}' with {behind} remote commit(s)."
-        ))
+        match pull_mode.as_str() {
+            "ff-only" => Err(format!(
+                "Cannot fast-forward '{branch}': histories diverged ({ahead} local, {behind} remote-only commits). No local commits were changed. Choose Merge or Rebase explicitly to integrate them."
+            )),
+            "merge" => match run_git(&repo_path, &["merge", "--no-ff", "--no-edit", "@{upstream}"]) {
+                Ok(_) => Ok(format!(
+                    "Merge pull completed on '{branch}'. A merge commit combines {ahead} local and {behind} remote-only commit(s)."
+                )),
+                Err(error) => {
+                    if get_merge_status(repo_path.clone())? {
+                        Err(format!(
+                            "Merge stopped with conflicts. Resolve them and create a merge commit, or use Abort Merge. Git details: {error}"
+                        ))
+                    } else {
+                        Err(format!("Merge pull failed: {error}"))
+                    }
+                }
+            },
+            "rebase" => match run_rebase_git(&repo_path, &["rebase", "--no-autostash", "@{upstream}"]) {
+                Ok(_) => Ok(format!(
+                    "Rebase completed. Replayed {ahead} local commit(s) on top of {behind} remote-only commit(s). Local commit IDs may have changed; review before pushing."
+                )),
+                Err(error) => {
+                    if rebase_in_progress(&repo_path)? {
+                        Err(format!(
+                            "Rebase paused. Resolve conflicts, then Continue Rebase, or choose Abort Rebase to restore the original commits. Git details: {error}"
+                        ))
+                    } else {
+                        Err(format!("Rebase pull failed: {error}"))
+                    }
+                }
+            },
+            _ => unreachable!("Pull strategy validated above"),
+        }
     })
     .await
     .map_err(|error| error.to_string())?
@@ -1353,6 +1470,9 @@ fn initialize_repository(folder_path: String) -> Result<String, String> {
 }
 
 fn require_no_merge(repo_path: &str) -> Result<(), String> {
+    if rebase_in_progress(repo_path)? {
+        return Err("Finish or abort the current rebase first.".into());
+    }
     let merge_head = Command::new("git")
         .arg("-C")
         .arg(repo_path)
@@ -1510,6 +1630,9 @@ pub fn run() {
             delete_branch,
             merge_branch,
             get_merge_status,
+            get_rebase_status,
+            continue_rebase,
+            abort_rebase,
             abort_merge,
             resolve_conflict_current,
             resolve_conflict_incoming,
