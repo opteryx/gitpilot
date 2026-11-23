@@ -1,0 +1,21 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: GitPilot
+Upstream-Contact: Joe Shockey
+Source: https://github.com/opteryx/gitpilot
+
+Files: *
+Copyright: 2026 Joe Shockey
+License: GPL-3.0-only
+
+License: GPL-3.0-only
+ GitPilot is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published
+ by the Free Software Foundation, version 3 of the License.
+ .
+ GitPilot is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ .
+ On Debian and Ubuntu systems, the complete text of the GNU General
+ Public License version 3 is available in
+ /usr/share/common-licenses/GPL-3.

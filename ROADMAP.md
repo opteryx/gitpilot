@@ -145,9 +145,10 @@ See [ADVANCED_PULL_TEST_PLAN.md](ADVANCED_PULL_TEST_PLAN.md) for the detailed Ad
 - **Advanced Pull** defaults to Fast-forward Only, checks for uncommitted changes, and uses explicit Merge or Rebase selection for divergence. Rebase conflict recovery was tested in disposable repositories.
 - **HTTPS credentials** are supplied through the user's configured Git credential helper. Cross-platform credential setup and helper availability still require validation.
 
+
 ## Phase 5 — Ubuntu release preparation (In Progress)
 
-**Release scope:** Build and validate the first Ubuntu `.deb` package on Ubuntu 22.04. Windows and macOS builds are deferred until test machines are available. No installer has been released yet.
+**Release scope:** Build and validate the first Ubuntu `.deb` package on Ubuntu 22.04. Windows and macOS builds are deferred until test machines are available. No installer has been publicly released yet.
 
 ### Completed — November 23, 2026
 
@@ -155,16 +156,22 @@ See [ADVANCED_PULL_TEST_PLAN.md](ADVANCED_PULL_TEST_PLAN.md) for the detailed Ad
 - [x] Retest the corrected **Keep Local Commit** confirmation label and Cancel behavior.
 - [x] Add and visually test section-level **More Info** help buttons; correct clipping within sidebar and details panels.
 - [x] Choose **GNU GPL v3 only**, add `LICENSE`, and update README copyright and licensing information.
-- [x] Add author, license, and publisher metadata in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` (pending build verification and commit).
+- [x] Add author, license, and publisher metadata in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+- [x] Configure Rust edition 2021 and successfully build the production React/Vite frontend and Rust application.
+- [x] Correct application branding to **GitPilot**, including the application window title and Ubuntu launcher.
+- [x] Build the Ubuntu 22.04 AMD64 Debian installer (`GitPilot_0.1.0_amd64.deb`).
+- [x] Install an initial Debian package and verify application launch, icon, repository opening, commit history, and refresh.
+- [x] Configure and verify Debian dependencies: Git, WebKitGTK, and GTK, without duplicate entries.
+- [x] Add Debian copyright documentation and the complete GPL v3 license to the installer; verify both files are included.
 
-### Next — Ubuntu package
+### Next — Complete Ubuntu release
 
-- [ ] Run the production frontend build and verify Tauri/Cargo release configuration, version, identifier, metadata, and icons.
-- [ ] Review third-party dependencies/assets and release source availability for GPL compliance.
-- [ ] Document Ubuntu runtime prerequisites (especially Git), SSH/HTTPS authentication, optional GitHub CLI, and common conflict recovery.
-- [ ] Build an Ubuntu `.deb` package and install it outside the development workflow.
-- [ ] Smoke-test the installed application: launching, icons, native dialogs, opening repositories, Git operations, and authentication.
-- [ ] Update installation instructions and screenshots, then commit/push the verified release-preparation changes and prepare the first release.
+- [ ] Review third-party dependencies and assets, and ensure corresponding source availability and licensing compliance.
+- [ ] Document Ubuntu installation requirements, SSH/HTTPS authentication, optional GitHub CLI, and common conflict recovery.
+- [ ] Install the final Debian package and smoke-test launching, icons, native dialogs, repository operations, and authentication.
+- [ ] Add installation instructions and screenshots to the README.
+- [ ] Commit and push the verified release-preparation changes.
+- [ ] Prepare and publish the first GitHub release with the Ubuntu AMD64 `.deb` installer.
 
 ### Deferred — Later platforms and enhancements
 

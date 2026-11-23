@@ -1,6 +1,7 @@
 [package]
 name = "gitpilot"
 version = "0.1.0"
+edition = "2021"
 authors = ["Joe Shockey"]
 homepage = "https://github.com/opteryx/gitpilot"
 description = "A simple Git desktop client"

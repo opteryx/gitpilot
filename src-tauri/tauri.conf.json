@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "gitpilot",
+  "productName": "GitPilot",
   "version": "0.1.0",
   "identifier": "com.blacklab.gitpilot",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "gitpilot",
+        "title": "GitPilot",
         "width": 800,
         "height": 600
       }
@@ -34,6 +34,17 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "git"
+        ],
+        "files": {
+          "/usr/share/doc/git-pilot/copyright": "debian/copyright",
+          "/usr/share/doc/git-pilot/LICENSE": "../LICENSE"
+        }
+      }
+    }
   }
 }
