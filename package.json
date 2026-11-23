@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "author": "Joe Shockey (Opteryx)",
+  "license": "GPL-3.0-only",
+  "homepage": "https://github.com/opteryx/gitpilot",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opteryx/gitpilot.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

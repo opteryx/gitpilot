@@ -1194,6 +1194,7 @@ button:not(
 
 .branch-help-heading {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
 	position: relative;
@@ -1211,13 +1212,15 @@ button:not(
 	text-align: center;
 }
 
+/* Inline help panels stay inside their scrolling column instead of being
+   clipped by the sidebar, details panel, or the bottom of the window. */
 .branch-help-popup {
-	position: absolute;
-	top: 100%;
-	left: 0;
-	z-index: 100;
-	width: 260px;
-	max-width: calc(100vw - 32px);
+	position: static;
+	flex: 0 0 100%;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	margin-top: 4px;
 	padding: 12px;
 	background: #fff;
 	border: 1px solid #aebdce;
@@ -1226,6 +1229,7 @@ button:not(
 	color: #263445;
 	font-size: 12px;
 	line-height: 1.4;
+	overflow-wrap: anywhere;
 }
 
 .branch-help-popup p {
@@ -1284,4 +1288,69 @@ button:not(
 	color: #566477;
 	overflow-wrap: anywhere;
 	line-height: 1.4;
+}
+
+/* Shared optional section explanations; existing Git operations are unchanged. */
+.info-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	position: relative;
+	min-width: 0;
+	flex-shrink: 0;
+}
+
+.info-heading > h2,
+.info-heading > h3 {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.info-heading > .branch-help-button {
+	flex: 0 0 18px;
+}
+
+/* Match the original spacing and separators when a heading gains a help button. */
+.sidebar > .info-heading,
+.details-panel > .info-heading {
+	margin-bottom: 14px;
+}
+
+.sidebar .branch-list > .info-heading,
+.sidebar .history-panel > .info-heading {
+	border-top: 1px solid #bbc7d4;
+	margin-top: 18px;
+	padding-top: 12px;
+	margin-bottom: 10px;
+}
+
+.sidebar .branch-list > .info-heading > h3,
+.sidebar .history-panel > .info-heading > h2 {
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 20px;
+}
+
+.phase4-tools > .info-heading {
+	margin-bottom: 10px;
+}
+
+.phase4-tools > .info-heading > h3 {
+	font-size: 14px;
+	line-height: 20px;
+}
+
+.commit-panel > .info-heading {
+	margin-bottom: 12px;
+}
+
+.file-diff-panel > .info-heading,
+.commit-files-panel > .info-heading {
+	margin-bottom: 12px;
+}
+
+.conflict-resolution > .info-heading {
+	margin-bottom: 8px;
 }

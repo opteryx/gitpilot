@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
@@ -118,6 +118,40 @@ function formatGitError(error) {
 
 	// Preserve errors we don't recognize.
 	return message;
+}
+
+// Reusable section help: each heading controls its own optional explanation.
+function InfoHeading({ as: Heading = "h2", label, help, children }) {
+	const [isOpen, setIsOpen] = useState(false);
+	const helpId = useId();
+
+	return (
+		<div className="info-heading">
+			<Heading>{children ?? label}</Heading>
+			<button
+				type="button"
+				className="branch-help-button"
+				aria-label={`More information about ${label}`}
+				aria-expanded={isOpen}
+				aria-controls={isOpen ? helpId : undefined}
+				title={`More information about ${label}`}
+				onClick={() => setIsOpen((wasOpen) => !wasOpen)}
+			>
+				?
+			</button>
+			{isOpen && (
+				<div
+					id={helpId}
+					className="branch-help-popup"
+					role="region"
+					aria-label={`${label} help`}
+				>
+					<strong>{label}</strong>
+					<p>{help}</p>
+				</div>
+			)}
+		</div>
+	);
 }
 
 function App() {
@@ -453,7 +487,8 @@ function App() {
 			branchBusy ||
 			mergeInProgress ||
 			rebaseInProgress
-		) return;
+		)
+			return;
 
 		const path = repoPath;
 		const requestId = repoRequestId.current;
@@ -461,13 +496,15 @@ function App() {
 		const trackingBranch = upstreamStatus.split("|")[0];
 
 		if (selectedMode !== "ff-only") {
-			const details = selectedMode === "rebase"
-				? "Rebase replays your local commits above the remote commits. Local commit IDs can change. Do not rebase shared commits that others are using."
-				: "Merge combines local and remote histories, creating a merge commit if they diverged. Conflicts may need manual resolution.";
+			const details =
+				selectedMode === "rebase"
+					? "Rebase replays your local commits above the remote commits. Local commit IDs can change. Do not rebase shared commits that others are using."
+					: "Merge combines local and remote histories, creating a merge commit if they diverged. Conflicts may need manual resolution.";
 			const confirmed = await ask(
 				`Pull using ${selectedMode === "rebase" ? "Rebase" : "Merge"}?\n\n` +
 					`Local branch: ${branch}\nUpstream: ${trackingBranch}\n\n` +
-					details + "\n\nA clean working directory is required.",
+					details +
+					"\n\nA clean working directory is required.",
 				{
 					title: "Confirm Pull Strategy",
 					kind: "warning",
@@ -505,15 +542,23 @@ function App() {
 	}
 
 	async function handleRebaseAction(action) {
-		if (!repoPath || !rebaseInProgress || branchBusy || pullingBranch) return;
+		if (!repoPath || !rebaseInProgress || branchBusy || pullingBranch)
+			return;
 		if (action === "continue" && workingChanges.some(isConflicted)) {
-			setError("Resolve and stage all conflicted files before continuing the rebase.");
+			setError(
+				"Resolve and stage all conflicted files before continuing the rebase.",
+			);
 			return;
 		}
 		if (action === "abort") {
 			const confirmed = await ask(
 				"Abort the rebase and restore the original local commits? Any conflict resolutions made during this rebase will be lost.",
-				{ title: "Abort Rebase", kind: "warning", okLabel: "Abort Rebase", cancelLabel: "Cancel" },
+				{
+					title: "Abort Rebase",
+					kind: "warning",
+					okLabel: "Abort Rebase",
+					cancelLabel: "Cancel",
+				},
 			);
 			if (!confirmed) return;
 		}
@@ -522,7 +567,10 @@ function App() {
 		setBranchBusy(true);
 		setError("");
 		try {
-			const result = await invoke(action === "abort" ? "abort_rebase" : "continue_rebase", { repoPath: path });
+			const result = await invoke(
+				action === "abort" ? "abort_rebase" : "continue_rebase",
+				{ repoPath: path },
+			);
 			if (requestId !== repoRequestId.current) return;
 			clearSelection();
 			await refreshRepository(true);
@@ -541,7 +589,12 @@ function App() {
 		if (!repoPath || !rebaseInProgress || !isConflicted(file)) return;
 		const confirmed = await ask(
 			`Mark your edited version of "${file.path}" as resolved?\n\nMake sure you have removed conflict markers and saved the intended content before staging it.`,
-			{ title: "Mark Rebase Conflict Resolved", kind: "warning", okLabel: "Stage Resolved File", cancelLabel: "Cancel" },
+			{
+				title: "Mark Rebase Conflict Resolved",
+				kind: "warning",
+				okLabel: "Stage Resolved File",
+				cancelLabel: "Cancel",
+			},
 		);
 		if (!confirmed) return;
 		try {
@@ -553,7 +606,9 @@ function App() {
 				await refreshWorkingFileDiff(updated, "staged");
 				setWorkingDiffMode("staged");
 			} else clearSelection();
-			setOperationStatus(`Marked '${file.path}' resolved. Continue Rebase when all conflicts are staged.`);
+			setOperationStatus(
+				`Marked '${file.path}' resolved. Continue Rebase when all conflicts are staged.`,
+			);
 		} catch (err) {
 			setError(String(err));
 		}
@@ -1349,7 +1404,9 @@ function App() {
 				: `Keep the current branch version of "${file.path}"?\n\nThis discards the incoming version of this file.`) +
 				" The selected version replaces the entire file and will be staged.",
 			{
-				title: rebaseInProgress ? "Keep Upstream Version" : "Keep Current Version",
+				title: rebaseInProgress
+					? "Keep Upstream Version"
+					: "Keep Current Version",
 				kind: "warning",
 				okLabel: "Keep Current",
 				cancelLabel: "Cancel",
@@ -1396,9 +1453,13 @@ function App() {
 				: `Keep the incoming branch version of "${file.path}"?\n\nThis discards the current branch version of this file.`) +
 				" The selected version replaces the entire file and will be staged.",
 			{
-				title: rebaseInProgress ? "Keep Local Commit" : "Keep Incoming Version",
+				title: rebaseInProgress
+					? "Keep Local Commit"
+					: "Keep Incoming Version",
 				kind: "warning",
-				okLabel: rebaseInProgress ? "Keep Local Commit" : "Keep Incoming",
+				okLabel: rebaseInProgress
+					? "Keep Local Commit"
+					: "Keep Incoming",
 				cancelLabel: "Cancel",
 			},
 		);
@@ -1472,7 +1533,13 @@ function App() {
 	}
 
 	async function createCommit() {
-		if (!repoPath || !commitMessage.trim() || commitLoading || rebaseInProgress) return;
+		if (
+			!repoPath ||
+			!commitMessage.trim() ||
+			commitLoading ||
+			rebaseInProgress
+		)
+			return;
 
 		if (workingChanges.some(isConflicted)) {
 			setError("Resolve all merge conflicts before creating a commit.");
@@ -1918,7 +1985,10 @@ function App() {
 				<div className="left-column">
 					{/* LEFT COLUMN — Repository */}
 					<aside className="sidebar">
-						<h2>Repository</h2>
+						<InfoHeading
+							label="Repository"
+							help="Open an existing repository, initialize one in an existing folder, or clone one from a remote. Refresh updates the displayed repository information without changing files or contacting a remote."
+						/>
 
 						<button
 							type="button"
@@ -2043,11 +2113,38 @@ function App() {
 						{rebaseInProgress && (
 							<div className="merge-warning" role="status">
 								<strong>Rebase in Progress</strong>
-								<p>Resolve and stage each conflicted file. During a rebase, "ours" is upstream and "theirs" is the local commit being replayed. Continue may pause again if a later commit conflicts.</p>
-								<button type="button" onClick={() => handleRebaseAction("continue")} disabled={branchBusy || pullingBranch || workingChanges.some(isConflicted)} title="Continue replaying local commits after resolving and staging conflicts. Git: git rebase --continue">
-									{branchBusy ? "Working..." : "Continue Rebase"}
+								<p>
+									Resolve and stage each conflicted file.
+									During a rebase, "ours" is upstream and
+									"theirs" is the local commit being replayed.
+									Continue may pause again if a later commit
+									conflicts.
+								</p>
+								<button
+									type="button"
+									onClick={() =>
+										handleRebaseAction("continue")
+									}
+									disabled={
+										branchBusy ||
+										pullingBranch ||
+										workingChanges.some(isConflicted)
+									}
+									title="Continue replaying local commits after resolving and staging conflicts. Git: git rebase --continue"
+								>
+									{branchBusy
+										? "Working..."
+										: "Continue Rebase"}
 								</button>
-								<button type="button" className="button-danger" onClick={() => handleRebaseAction("abort")} disabled={branchBusy || pullingBranch} title="Return to the state before rebasing. Git: git rebase --abort">Abort Rebase</button>
+								<button
+									type="button"
+									className="button-danger"
+									onClick={() => handleRebaseAction("abort")}
+									disabled={branchBusy || pullingBranch}
+									title="Return to the state before rebasing. Git: git rebase --abort"
+								>
+									Abort Rebase
+								</button>
 							</div>
 						)}
 
@@ -2090,7 +2187,9 @@ function App() {
 											<p>
 												<strong>Pull:</strong> Download
 												remote changes and update your
-												current branch. Fast-forward Only is the default; Merge and Rebase are optional.
+												current branch. Fast-forward
+												Only is the default; Merge and
+												Rebase are optional.
 											</p>
 
 											<p>
@@ -2109,14 +2208,52 @@ function App() {
 									)}
 								</div>
 
-								<div style={{ marginBottom: "12px", fontSize: "12px" }}>
-									<label htmlFor="pull-strategy" style={{ display: "block", fontWeight: 600, marginBottom: "4px" }}>Pull Strategy</label>
-									<select id="pull-strategy" value={pullMode} onChange={(event) => setPullMode(event.target.value)} disabled={pullingBranch || repoLoading || mergeInProgress || rebaseInProgress} style={{ width: "100%", padding: "6px", border: "1px solid #8293a6", borderRadius: "4px" }} title="Select how Pull integrates diverged histories. Fast-forward Only never changes existing local commits.">
-										<option value="ff-only">Fast-forward Only (default)</option>
+								<div
+									style={{
+										marginBottom: "12px",
+										fontSize: "12px",
+									}}
+								>
+									<label
+										htmlFor="pull-strategy"
+										style={{
+											display: "block",
+											fontWeight: 600,
+											marginBottom: "4px",
+										}}
+									>
+										Pull Strategy
+									</label>
+									<select
+										id="pull-strategy"
+										value={pullMode}
+										onChange={(event) =>
+											setPullMode(event.target.value)
+										}
+										disabled={
+											pullingBranch ||
+											repoLoading ||
+											mergeInProgress ||
+											rebaseInProgress
+										}
+										style={{
+											width: "100%",
+											padding: "6px",
+											border: "1px solid #8293a6",
+											borderRadius: "4px",
+										}}
+										title="Select how Pull integrates diverged histories. Fast-forward Only never changes existing local commits."
+									>
+										<option value="ff-only">
+											Fast-forward Only (default)
+										</option>
 										<option value="merge">Merge</option>
 										<option value="rebase">Rebase</option>
 									</select>
-									<p className="phase4-hint" style={{ margin: "6px 0 0" }}>
+									<p
+										className="phase4-hint"
+										style={{ margin: "6px 0 0" }}
+									>
 										{pullMode === "rebase"
 											? "Replays local commits onto upstream; commit IDs may change."
 											: pullMode === "merge"
@@ -2293,7 +2430,13 @@ function App() {
 															}
 															title={
 																`Fetch and integrate the current branch using ${pullMode}.\n` +
-																(pullMode === "rebase" ? "Git: git rebase @{upstream}" : pullMode === "merge" ? "Git: git merge --no-edit @{upstream}" : "Git: git merge --ff-only @{upstream}")
+																(pullMode ===
+																"rebase"
+																	? "Git: git rebase @{upstream}"
+																	: pullMode ===
+																		  "merge"
+																		? "Git: git merge --no-edit @{upstream}"
+																		: "Git: git merge --ff-only @{upstream}")
 															}
 														>
 															{pullingBranch
@@ -2362,7 +2505,9 @@ function App() {
 						{branch ? (
 							<p className="branch-name">{branch}</p>
 						) : rebaseInProgress ? (
-							<p className="branch-name">Rebasing (detached HEAD)</p>
+							<p className="branch-name">
+								Rebasing (detached HEAD)
+							</p>
 						) : (
 							<p className="placeholder">
 								No repository selected
@@ -2462,7 +2607,11 @@ function App() {
 
 						{branches.length > 0 && (
 							<div className="branch-list">
-								<h3>Local Branches</h3>
+								<InfoHeading
+									as="h3"
+									label="Local Branches"
+									help="Click a branch name to switch to it. Create a new branch below, merge a selected branch into the active branch, or delete a branch that Git considers safely merged."
+								/>
 
 								{branches.map((branchName) => (
 									<div
@@ -2611,7 +2760,11 @@ function App() {
 						)}
 						{repoPath && (
 							<section className="phase4-tools">
-								<h3>Stash &amp; Settings</h3>
+								<InfoHeading
+									as="h3"
+									label="Stash & Settings"
+									help="Stash temporarily saves your uncommitted changes, including untracked files. Apply Latest Stash restores them and keeps the saved backup. Repository Author Settings changes the commit author for this repository only."
+								/>
 								<button
 									type="button"
 									onClick={saveStash}
@@ -2670,7 +2823,10 @@ function App() {
 						)}
 						{/* COMMIT HISTORY — Following branch management in the scrolling sidebar */}
 						<section className="history-panel">
-							<h2>Commit History</h2>
+							<InfoHeading
+								label="Commit History"
+								help="Shows commits on the current branch, newest first. Select a commit to see its author, message, changed files, and file differences."
+							/>
 
 							{commits.length === 0 ? (
 								<div className="empty-state">
@@ -2728,9 +2884,12 @@ function App() {
 					<section className="content">
 						<div className="working-changes-panel">
 							<div className="panel-heading">
-								<h2>
+								<InfoHeading
+									label="Working Changes"
+									help="Shows uncommitted changes in the repository. Select a file to inspect it. Stage includes changes in your next commit; Unstage removes them from that commit without discarding your edits."
+								>
 									Working Changes ({workingChanges.length})
-								</h2>
+								</InfoHeading>
 
 								<div className="working-changes-actions">
 									<button
@@ -2989,7 +3148,10 @@ function App() {
 
 					<div className="commit-panel-container">
 						<section className="commit-panel">
-							<h2>Create Commit</h2>
+							<InfoHeading
+								label="Create Commit"
+								help="Stage the files you want to include, then enter a short summary. To add details, leave a blank line after the summary. A commit saves your staged changes locally; it does not push them to GitHub."
+							/>
 
 							<textarea
 								className="commit-message-input"
@@ -3032,11 +3194,18 @@ function App() {
 
 					{/* RIGHT COLUMN — Details */}
 					<aside className="details-panel">
-						<h2>
-							{selectedWorkingFile
-								? "Working File Details"
-								: "Commit Details"}
-						</h2>
+						<InfoHeading
+							label={
+								selectedWorkingFile
+									? "Working File Details"
+									: "Commit Details"
+							}
+							help={
+								selectedWorkingFile
+									? "Review changes in the selected working file. Choose Staged or Unstaged to compare the two views. When a file is conflicted, review the resolution options before replacing its contents."
+									: "Select a commit in Commit History to inspect its message and list of changed files. Select a file to view the differences introduced by that commit."
+							}
+						/>
 
 						{selectedWorkingFile ? (
 							<>
@@ -3051,12 +3220,24 @@ function App() {
 
 								{isConflicted(selectedWorkingFile) && (
 									<div className="conflict-resolution">
-										<h3>{rebaseInProgress ? "Resolve Rebase Conflict" : "Resolve Merge Conflict"}</h3>
+										<InfoHeading
+											as="h3"
+											label={
+												rebaseInProgress
+													? "Resolve Rebase Conflict"
+													: "Resolve Merge Conflict"
+											}
+											help={
+												rebaseInProgress
+													? "Keep Upstream selects the upstream file; Keep Local Commit selects the commit being replayed. Either choice replaces the full file and stages it. You can instead edit the file and stage your resolution."
+													: "Keep Current selects the current branch's file; Keep Incoming selects the merged branch's file. Either choice replaces the full file and stages it. You can also resolve the conflict manually."
+											}
+										/>
 
 										<p>
 											{rebaseInProgress
 												? 'During rebase, "Keep Upstream" uses Git ours and "Keep Local Commit" uses Git theirs. Each choice replaces the entire file. Alternatively, edit the file yourself and stage the resolved version.'
-												: 'Choose which version of this file to keep. The chosen version replaces the entire file and is staged automatically.'}
+												: "Choose which version of this file to keep. The chosen version replaces the entire file and is staged automatically."}
 										</p>
 
 										<div className="conflict-resolution-actions">
@@ -3069,7 +3250,9 @@ function App() {
 													)
 												}
 											>
-												{rebaseInProgress ? "Keep Upstream" : "Keep Current"}
+												{rebaseInProgress
+													? "Keep Upstream"
+													: "Keep Current"}
 											</button>
 
 											<button
@@ -3081,13 +3264,19 @@ function App() {
 													)
 												}
 											>
-												{rebaseInProgress ? "Keep Local Commit" : "Keep Incoming"}
+												{rebaseInProgress
+													? "Keep Local Commit"
+													: "Keep Incoming"}
 											</button>
 											{rebaseInProgress && (
 												<button
 													type="button"
 													className="button-secondary"
-													onClick={() => markConflictResolved(selectedWorkingFile)}
+													onClick={() =>
+														markConflictResolved(
+															selectedWorkingFile,
+														)
+													}
 													title="Stage your manually resolved version after removing conflict markers. Git: git add"
 												>
 													Use Edited File
@@ -3098,7 +3287,11 @@ function App() {
 								)}
 
 								<div className="file-diff-panel">
-									<h3>Working File Differences</h3>
+									<InfoHeading
+										as="h3"
+										label="Working File Differences"
+										help="Unstaged shows changes not yet added to the next commit. Staged shows changes already prepared for that commit. Binary files may display a notice instead of a text diff."
+									/>
 
 									<div className="diff-mode-buttons">
 										<button
@@ -3200,7 +3393,11 @@ function App() {
 								</div>
 
 								<div className="commit-files-panel">
-									<h3>Changed Files</h3>
+									<InfoHeading
+										as="h3"
+										label="Changed Files"
+										help="Lists files added, modified, or removed in the selected commit. Click a file to see the changes introduced by that commit."
+									/>
 
 									{filesLoading ? (
 										<p>Loading files...</p>
@@ -3241,11 +3438,15 @@ function App() {
 								</div>
 
 								<div className="file-diff-panel">
-									<h3>
+									<InfoHeading
+										as="h3"
+										label="File Differences"
+										help="Shows the selected file's changes in this commit. Added lines are green, removed lines are red, and @@ markers identify sections of the diff."
+									>
 										{selectedFile
 											? `Changes in ${selectedFile.path}`
 											: "File Differences"}
-									</h3>
+									</InfoHeading>
 
 									{!selectedFile ? (
 										<p className="placeholder">

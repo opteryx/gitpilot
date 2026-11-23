@@ -24,6 +24,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Joe Shockey",
+    "copyright": "Copyright © 2026 Joe Shockey",
+    "homepage": "https://github.com/opteryx/gitpilot",
+    "shortDescription": "A simple Git desktop client",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

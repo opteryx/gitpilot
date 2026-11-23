@@ -1,9 +1,11 @@
 [package]
 name = "gitpilot"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+authors = ["Joe Shockey"]
+homepage = "https://github.com/opteryx/gitpilot"
+description = "A simple Git desktop client"
+license = "GPL-3.0-only"
+repository = "https://github.com/opteryx/gitpilot"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

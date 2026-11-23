@@ -2,7 +2,7 @@
 
 GitPilot is a simple, cross-platform Git desktop client built with **Tauri, Rust, React, and Vite**. Its goal is to make everyday Git operations understandable without requiring command-line knowledge, a subscription, or a complicated interface.
 
-This is a living roadmap, not a fixed release schedule. Priorities may change as features are tested. **Last updated: November 22, 2026.**
+This is a living roadmap, not a fixed release schedule. Priorities may change as features are tested. **Last updated: November 23, 2026.**
 
 ## Status legend
 
@@ -104,6 +104,8 @@ Implemented incrementally and tested using disposable repositories.
 
 - [x] **Contextual help popups** — Offer optional, short explanations for unfamiliar operations.
 
+- [x] **Section-level More Info buttons** — Add consistent help beside major headings and ensure help panels stay readable inside scrolling columns (verified on Ubuntu November 23, 2026).
+
 - [x] **More precise Pull feedback** — Distinguish **Already up to date**, **Fast-forwarded to new commits**, and **Unable to fast-forward**.
 
 - [x] **Sidebar styling cleanup** — Standardize section headings, typography, separator spacing, and contextual help icon alignment.
@@ -114,7 +116,7 @@ Implemented incrementally and tested using disposable repositories.
 
 ## Phase 4 — Additional Git functionality (Complete — Linux verified)
 
-Eight feature areas implemented and functionally tested on Ubuntu 22.04 by November 22, 2026. Cross-platform and additional edge-case testing remain part of Phase 5 release preparation.
+Eight feature areas implemented and functionally tested on Ubuntu 22.04 by November 22, 2026. The final focused Linux regression pass was completed on November 23; Windows/macOS testing is deferred.
 
 - [x] **Initialize Repository** — Initialize Git in an existing selected local folder and open it, including repositories with no commits yet.
 - [x] **HTTPS authentication** — Honor configured Git credential helpers (tested with GitHub CLI `gh auth setup-git`) without embedding or storing credentials in GitPilot; preserve SSH support and noninteractive Git operations.
@@ -125,23 +127,14 @@ Eight feature areas implemented and functionally tested on Ubuntu 22.04 by Novem
 - [x] **Discard working changes** — Discard unstaged changes to tracked files after confirmation while preserving staged versions.
 - [x] **Repository settings** — Edit repository-local commit author name and email without changing global configuration.
 
-### Phase 4 test results — November 22, 2026
+### Phase 4 verification — November 22–23, 2026
 
-- **Application build:** Vite started and the Tauri/Rust backend compiled successfully on Ubuntu 22.04, including the Advanced Pull changes.
-- **Initialize Repository:** Initialized an empty directory, opened the repository, and created its first commit.
-- **Unstage regression fix:** Verified Unstage and Unstage All in a repository with no HEAD commit.
-- **Repository author settings:** Verified local identity changes with `git config --local`.
-- **Stash / Apply Latest Stash:** Saved and restored a modified tracked file; retained the stash backup.
-- **Discard changes:** Verified unstaged-only and staged-plus-unstaged cases; staged changes survived.
-- **Binary file handling:** Verified untracked preview and staged diff notices.
-- **HTTPS authentication:** Used a private GitHub test repository to verify HTTPS Clone, Fetch, Publish Branch, Push, and Pull (both already-up-to-date and with an incoming commit).
-- **Fast-forward Only:** Confirmed it remains the default and refuses divergent histories without altering commits.
-- **Merge Pull:** Combined independent local and remote commits without conflicts; confirmed merge commit, clean tree, Ahead 2 / Behind 0.
-- **Rebase Pull:** Replayed a local commit above the remote commit without conflicts; confirmed clean tree, Ahead 1 / Behind 0.
-- **Rebase conflict detection:** Confirmed conflicted file, Rebase in Progress warning, and recovery controls.
-- **Continue Rebase:** Resolved a conflict using the replayed local commit version and successfully completed the rebase.
-- **Abort Rebase:** Aborted a conflicting rebase, restored the original local branch and commit, and confirmed a clean working tree with Ahead 1 / Behind 1.
-- **UI label fix:** Updated the Rebase confirmation button from “Keep Incoming” to “Keep Local Commit.” The one-line change has passed `git diff --check`; the revised button text has not yet been retested in a new conflict scenario.
+- **Local workflows:** Initialized an empty repository, verified first-commit staging, repository author settings, stash/apply, discard safeguards, and binary file notices on Ubuntu 22.04.
+- **Remote workflows:** Verified HTTPS Clone, Fetch, Publish Branch, Push, and Pull against a private GitHub test repository using configured Git credentials.
+- **Pull strategies:** Confirmed fast-forward refusal on divergence, successful Merge and Rebase pulls, and conflict recovery using Continue Rebase and Abort Rebase.
+- **Final UI regression (November 23):** Verified the corrected **Keep Local Commit** confirmation and Cancel behavior, and the empty-repository message.
+
+See [ADVANCED_PULL_TEST_PLAN.md](ADVANCED_PULL_TEST_PLAN.md) for the detailed Advanced Pull test procedure.
 
 ### Phase 4 safeguards and remaining validation
 
@@ -151,27 +144,33 @@ Eight feature areas implemented and functionally tested on Ubuntu 22.04 by Novem
 - **Repository Author Settings** affect the local repository, not global Git identity.
 - **Advanced Pull** defaults to Fast-forward Only, checks for uncommitted changes, and uses explicit Merge or Rebase selection for divergence. Rebase conflict recovery was tested in disposable repositories.
 - **HTTPS credentials** are supplied through the user's configured Git credential helper. Cross-platform credential setup and helper availability still require validation.
-- **Further regression coverage:** Test stash with untracked files, binary diffs in commit history, additional conflict/error scenarios, and the new Rebase confirmation label before release.
-- **Small UI cleanup:** Recheck the empty-history wording in a newly initialized empty repository during the final smoke test.
 
-## Phase 5 — Release preparation (Next)
+## Phase 5 — Ubuntu release preparation (In Progress)
 
-1. Perform a final Linux smoke test, including the corrected Rebase dialog label and no-commit repository behavior.
-2. Commit and push the completed Advanced Pull implementation, test plan, and updated roadmap. HTTPS authentication was committed separately as its own rollback checkpoint.
-3. Expand edge-case and regression coverage on disposable repositories.
-4. Document prerequisites (Git, platform-specific credential helpers, optional GitHub CLI), common workflows, authentication, and conflict recovery.
-5. Test builds and everyday workflows on Linux, Windows, and macOS; verify native dialogs, application icons, SSH/HTTPS authentication, and filesystem behavior.
-6. Build and test installable packages for supported platforms; prepare first-release documentation.
+**Release scope:** Build and validate the first Ubuntu `.deb` package on Ubuntu 22.04. Windows and macOS builds are deferred until test machines are available. No installer has been released yet.
 
-### Phase 5 release checklist (Planned)
+### Completed — November 23, 2026
 
-- [ ] Test builds and everyday workflows on Linux, Windows, and macOS.
+- [x] Complete a focused Linux regression pass covering repository opening, refresh, staging, commits, branch changes, stash/apply, rebase conflict cancellation and abort, and a repository without commits.
+- [x] Retest the corrected **Keep Local Commit** confirmation label and Cancel behavior.
+- [x] Add and visually test section-level **More Info** help buttons; correct clipping within sidebar and details panels.
+- [x] Choose **GNU GPL v3 only**, add `LICENSE`, and update README copyright and licensing information.
+- [x] Add author, license, and publisher metadata in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` (pending build verification and commit).
 
-- [ ] Verify application icons, native dialogs, and Git/SSH behavior on each supported platform.
+### Next — Ubuntu package
 
-- [ ] Document installation prerequisites and authentication setup.
+- [ ] Run the production frontend build and verify Tauri/Cargo release configuration, version, identifier, metadata, and icons.
+- [ ] Review third-party dependencies/assets and release source availability for GPL compliance.
+- [ ] Document Ubuntu runtime prerequisites (especially Git), SSH/HTTPS authentication, optional GitHub CLI, and common conflict recovery.
+- [ ] Build an Ubuntu `.deb` package and install it outside the development workflow.
+- [ ] Smoke-test the installed application: launching, icons, native dialogs, opening repositories, Git operations, and authentication.
+- [ ] Update installation instructions and screenshots, then commit/push the verified release-preparation changes and prepare the first release.
 
-- [ ] Build and test installable application packages for supported platforms.
+### Deferred — Later platforms and enhancements
+
+- [ ] Test and package Windows and macOS releases when machines are available, including dialogs, paths, icons, SSH/HTTPS credentials, and installed-app behavior.
+- [ ] Evaluate further edge cases: stash with untracked files, binary diffs in commit history, and additional conflict/error scenarios.
+- [ ] Consider creating a named folder during repository initialization, improved repository navigation, and other usability enhancements based on feedback.
 
 ## Development workflow
 
