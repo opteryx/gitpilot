@@ -67,7 +67,9 @@ npm run tauri dev
 
 ## Screenshots
 
-Screenshots will be added with the first release.
+## Screenshots
+
+![GitPilot 0.1.0 running on Ubuntu 22.04](screenshots/gitpilot-main.png)
 
 ## Technologies
 
