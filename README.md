@@ -19,16 +19,42 @@ Created by Joe Shockey ([Opteryx](https://github.com/opteryx)).
 
 ## Installation and development
 
-GitPilot is currently available **as source code**. Its first installable **Ubuntu `.deb` package** is in preparation. Windows and macOS packages are deferred until those platforms can be tested.
+GitPilot 0.1.0 has been built and tested on **Ubuntu 22.04 LTS (64-bit AMD64)**. The first public Ubuntu installer is being prepared.
+
+Windows and macOS packages are planned for the future but have not yet been tested.
+
+### Install on Ubuntu
+
+Once the first release is published, download `GitPilot_0.1.0_amd64.deb` from the [GitPilot Releases page](https://github.com/opteryx/gitpilot/releases).
+
+Open a terminal in the directory containing the downloaded file and run:
+
+```bash
+sudo apt install ./GitPilot_0.1.0_amd64.deb
+```
+
+APT will install the required dependencies, including Git, GTK, and WebKitGTK, if they are not already installed.
+
+After installation, launch **GitPilot** from Ubuntu's application menu.
+
+### Git authentication and GitHub integration
+
+GitPilot uses your existing Git authentication configuration:
+
+- **SSH:** Uses your configured SSH keys and SSH agent.
+- **HTTPS:** Uses your configured Git credential helper.
+- **GitHub CLI (`gh`):** Required only for GitPilot's **Create GitHub Repository** feature. It is not required for ordinary Git operations.
+
+GitPilot does not require a subscription.
 
 ### Development prerequisites
+
+To build and run GitPilot from source, install:
 
 - Git
 - Node.js and npm
 - Rust and Cargo
 - [Tauri 2 development dependencies](https://v2.tauri.app/start/prerequisites/) for your operating system
-
-GitPilot uses your existing SSH configuration or Git credential helpers for remote authentication. The GitHub CLI (`gh`) is needed only for the **Create GitHub Repository** feature.
 
 ### Run from source
 
@@ -38,8 +64,6 @@ cd gitpilot
 npm install
 npm run tauri dev
 ```
-
-Production package installation instructions will be added after the Ubuntu package has been built and tested.
 
 ## Screenshots
 
@@ -51,7 +75,7 @@ GitPilot uses **Tauri 2**, **React**, **Vite**, **JavaScript**, **Rust**, and th
 
 ## Roadmap
 
-The immediate priority is to build, install, and validate an Ubuntu `.deb` package, then document installation and authentication. Windows and macOS support remains a future goal, not a tested release claim.
+GitPilot 0.1.0 has been successfully built, installed, and tested on Ubuntu 22.04 LTS. The current priority is completing release documentation, licensing checks, and preparation for the first public Ubuntu release. Windows and macOS support remains a future goal.
 
 See [ROADMAP.md](ROADMAP.md) for completed work, remaining release checks, and deferred enhancements.
 
