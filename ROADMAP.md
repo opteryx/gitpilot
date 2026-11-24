@@ -134,7 +134,7 @@ Eight feature areas implemented and functionally tested on Ubuntu 22.04 by Novem
 - **Pull strategies:** Confirmed fast-forward refusal on divergence, successful Merge and Rebase pulls, and conflict recovery using Continue Rebase and Abort Rebase.
 - **Final UI regression (November 23):** Verified the corrected **Keep Local Commit** confirmation and Cancel behavior, and the empty-repository message.
 
-See [ADVANCED_PULL_TEST_PLAN.md](ADVANCED_PULL_TEST_PLAN.md) for the detailed Advanced Pull test procedure.
+See [ADVANCED_PULL_TEST_PLAN.md](docs/testing/ADVANCED_PULL_TEST_PLAN.md) for the detailed Advanced Pull test procedure.
 
 ### Phase 4 safeguards and remaining validation
 
