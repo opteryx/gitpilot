@@ -1,6 +1,6 @@
 # GitPilot
 
-**A simple, cross-platform desktop interface for Git.**
+**A simple desktop interface for Git.**
 
 GitPilot is a lightweight Git client focused on everyday version control, a clear interface, and optional contextual help rather than subscriptions or unnecessary complexity.
 
@@ -19,13 +19,13 @@ Created by Joe Shockey ([Opteryx](https://github.com/opteryx)).
 
 ## Installation and development
 
-GitPilot 0.1.0 has been built and tested on **Ubuntu 22.04 LTS (64-bit AMD64)**. The first public Ubuntu installer is being prepared.
+GitPilot **v0.1.0** is available as a Debian package for **Ubuntu 22.04 LTS (64-bit AMD64)**, where it has been built and tested.
 
 Windows and macOS packages are planned for the future but have not yet been tested.
 
 ### Install on Ubuntu
 
-Once the first release is published, download `GitPilot_0.1.0_amd64.deb` from the [GitPilot Releases page](https://github.com/opteryx/gitpilot/releases).
+Download **`GitPilot_0.1.0_amd64.deb`** from the [GitPilot v0.1.0 release page](https://github.com/opteryx/gitpilot/releases/tag/v0.1.0).
 
 Open a terminal in the directory containing the downloaded file and run:
 
@@ -33,7 +33,7 @@ Open a terminal in the directory containing the downloaded file and run:
 sudo apt install ./GitPilot_0.1.0_amd64.deb
 ```
 
-APT will install the required dependencies, including Git, GTK, and WebKitGTK, if they are not already installed.
+APT will install the required dependencies, including Git, GTK 3, and WebKitGTK, if they are not already installed.
 
 After installation, launch **GitPilot** from Ubuntu's application menu.
 
@@ -61,11 +61,9 @@ To build and run GitPilot from source, install:
 ```bash
 git clone https://github.com/opteryx/gitpilot.git
 cd gitpilot
-npm install
+npm ci
 npm run tauri dev
 ```
-
-## Screenshots
 
 ## Screenshots
 
@@ -77,7 +75,7 @@ GitPilot uses **Tauri 2**, **React**, **Vite**, **JavaScript**, **Rust**, and th
 
 ## Roadmap
 
-GitPilot 0.1.0 has been successfully built, installed, and tested on Ubuntu 22.04 LTS. The current priority is completing release documentation, licensing checks, and preparation for the first public Ubuntu release. Windows and macOS support remains a future goal.
+GitPilot **v0.1.0** was publicly released on **November 24, 2026**, after building, installation, and testing on Ubuntu 22.04 LTS. Next priorities include reviewing third-party license notices, expanding troubleshooting documentation, and responding to user feedback. Windows and macOS support remains a future goal, pending testing on those platforms.
 
 See [ROADMAP.md](ROADMAP.md) for completed work, remaining release checks, and deferred enhancements.
 
